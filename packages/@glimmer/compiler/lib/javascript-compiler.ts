@@ -259,31 +259,40 @@ export default class JavaScriptCompiler implements Processor<JavaScriptCompilerO
     this.push([SexpOpcodes.Modifier, name, params, hash]);
   }
 
-  block([template, inverse]: [number, Option<number>]) {
+  block(hasInverse: boolean) {
     let head = this.popValue<Expression>();
     let params = this.popValue<Params>();
     let hash = this.popValue<Hash>();
 
-    let blocks = this.template.block.blocks;
+    let template = this.template.block.blocks.pop();
+    assert(template !== undefined, `expected an inverse block, but none was pushed on the stack`);
+
+    let inverse = hasInverse ? this.template.block.blocks.pop() : undefined;
     assert(
-      typeof template !== 'number' || blocks[template] !== null,
-      'missing block in the compiler'
+      !hasInverse || inverse !== undefined,
+      `expected an inverse block, but none was pushed on the stack`
     );
-    assert(
-      typeof inverse !== 'number' || blocks[inverse] !== null,
-      'missing block in the compiler'
-    );
+
+    // let blocks = this.template.block.blocks;
+    // assert(
+    //   typeof template !== 'number' || blocks[template] !== null,
+    //   'missing block in the compiler'
+    // );
+    // assert(
+    //   typeof inverse !== 'number' || blocks[inverse] !== null,
+    //   'missing block in the compiler'
+    // );
 
     let namedBlocks: Option<Core.Blocks>;
 
     if (template === null && inverse === null) {
       namedBlocks = null;
-    } else if (inverse === null) {
-      namedBlocks = [['default'], [blocks[template]]];
+    } else if (inverse === undefined) {
+      namedBlocks = [['default'], [template]];
     } else {
       namedBlocks = [
         ['default', 'else'],
-        [blocks[template], blocks[inverse]],
+        [template, inverse],
       ];
     }
 
@@ -546,11 +555,11 @@ export default class JavaScriptCompiler implements Processor<JavaScriptCompilerO
   popLocatedValue<T extends StackValue>(): { value: T; location: Option<SourceLocation> } {
     assert(this.values.length, 'No expression found on stack');
     let value = this.values.pop() as T;
-    let location = this.locationStack.pop();
+    let location = this.locationStack.pop() || null;
 
-    if (location === undefined) {
-      throw new Error('Unbalanced location push and pop');
-    }
+    // if (location === undefined) {
+    //   throw new Error('Unbalanced location push and pop');
+    // }
 
     return { value, location };
   }

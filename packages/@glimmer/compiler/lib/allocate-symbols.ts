@@ -6,10 +6,11 @@ import {
   JavaScriptCompilerOps,
   Ops,
   SourceLocation,
+  NewAllocateSymbolsOps,, Opcode
 } from './compiler-ops';
 import { AST } from '@glimmer/syntax';
 import { Option, ExpressionContext } from '@glimmer/interfaces';
-import { Stack, expect } from '@glimmer/util';
+import { Stack, expect, unwrap, NonemptyStack } from '@glimmer/util';
 
 export type InVariable = PathHead;
 export type OutVariable = number;
@@ -17,7 +18,7 @@ export type OutVariable = number;
 export type Out = Ops<JavaScriptCompilerOps>;
 
 export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
-  private symbolStack = new Stack<AST.Symbols>();
+  private _symbolStack: NonemptyStack<AST.Symbols> | null = null;
 
   constructor(
     private ops: readonly Ops<AllocateSymbolsOps>[],
@@ -34,7 +35,7 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
 
     for (let i = 0; i < ops.length; i++) {
       let op = ops[i];
-      let location = this.locations[i];
+      let location = this.locations ? this.locations[i] : null;
       let result = this.dispatch(op);
 
       out.push(result);
@@ -45,26 +46,43 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
   }
 
   dispatch<O extends Ops<AllocateSymbolsOps>>(op: O): Ops<JavaScriptCompilerOps> {
-    let name = op[0];
-    let operand = op[1];
+    if (Array.isArray(op)) {
+      let name = op[0];
+      let operand = op[1];
 
-    return (this[name] as any)(operand) || ((op as unknown) as Ops<JavaScriptCompilerOps>);
+      return (this[name] as any)(operand) || ((op as unknown) as Ops<JavaScriptCompilerOps>);
+    } else {
+      let opcode = (op as Opcode).opcode;
+      let [name, ...operand] = opcode;
+
+      if (operand.length < 2) {
+        return this[name](...operand) || opcode;
+      } else {
+        return this[name](operand) || opcode;
+      }
+    }
   }
 
   get symbols(): AST.Symbols {
     return expect(this.symbolStack.current, 'Expected a symbol table on the stack');
   }
 
+  get symbolStack(): NonemptyStack<AST.Symbols> {
+    return expect(this._symbolStack, 'Expected a symbol table on the stack');
+  }
+
   startProgram(op: AST.Template) {
-    this.symbolStack.push(op.symbols!);
+    this._symbolStack = new NonemptyStack([
+      expect(op.symbols, 'Expected program to have a symbol table'),
+    ]);
   }
 
   endProgram() {
-    this.symbolStack.pop();
+    // this.symbolStack.pop();
   }
 
   startBlock(op: AST.Block) {
-    this.symbolStack.push(op.symbols!);
+    this.symbolStack.push(expect(op.symbols, 'Expected block to have a symbol table'));
   }
 
   endBlock() {
@@ -72,7 +90,7 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
   }
 
   openNamedBlock(op: AST.ElementNode) {
-    this.symbolStack.push(op.symbols!);
+    this.symbolStack.push(expect(op.symbols, 'Expected named block to have a symbol table'));
   }
 
   closeNamedBlock(_op: AST.ElementNode) {
@@ -80,7 +98,9 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
   }
 
   flushElement(op: AST.ElementNode) {
-    this.symbolStack.push(op.symbols!);
+    if (op.symbols) {
+      this.symbolStack.push(op.symbols);
+    }
   }
 
   closeElement(_op: AST.ElementNode) {
@@ -158,8 +178,8 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
     return ['partial', this.symbols.getEvalInfo()];
   }
 
-  block([template, inverse]: [number, Option<number>]): Op<JavaScriptCompilerOps, 'block'> {
-    return ['block', [template, inverse]];
+  block(hasInverse: boolean): Op<JavaScriptCompilerOps, 'block'> {
+    return ['block', hasInverse];
   }
 
   modifier(): Out {

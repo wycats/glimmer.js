@@ -257,7 +257,7 @@ export default class TemplateCompiler implements Processor<InputOps> {
     let templateId = this.templateIds.pop()!;
     let inverseId = action.inverse === null ? null : this.templateIds.pop()!;
     this.expression(action.path, ExpressionContext.BlockHead, action);
-    this.opcode(['block', [templateId, inverseId]], action);
+    this.opcode(['block', inverseId !== null], action);
   }
 
   /// Internal actions, not found in the original processed actions

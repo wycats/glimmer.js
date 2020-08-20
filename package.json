@@ -98,7 +98,7 @@
     "semver": "^6.3.0",
     "testem-failure-only-reporter": "^0.0.1",
     "toml": "^3.0.0",
-    "typescript": "3.7.5"
+    "typescript": "rc"
   },
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
