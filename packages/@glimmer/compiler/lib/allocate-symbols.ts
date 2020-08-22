@@ -1,16 +1,16 @@
-import {
-  Processor,
-  Op,
-  AllocateSymbolsOps,
-  PathHead,
-  JavaScriptCompilerOps,
-  Ops,
-  SourceLocation,
-  NewAllocateSymbolsOps,, Opcode
-} from './compiler-ops';
+import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
-import { Option, ExpressionContext } from '@glimmer/interfaces';
-import { Stack, expect, unwrap, NonemptyStack } from '@glimmer/util';
+import { expect, NonemptyStack } from '@glimmer/util';
+import {
+  AllocateSymbolsOps,
+  JavaScriptCompilerOps,
+  Op,
+  Opcode,
+  Ops,
+  PathHead,
+  Processor,
+  SourceLocation,
+} from './compiler-ops';
 
 export type InVariable = PathHead;
 export type OutVariable = number;
@@ -53,13 +53,10 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
       return (this[name] as any)(operand) || ((op as unknown) as Ops<JavaScriptCompilerOps>);
     } else {
       let opcode = (op as Opcode).opcode;
-      let [name, ...operand] = opcode;
+      let [name, operand] = opcode;
+      console.log(opcode);
 
-      if (operand.length < 2) {
-        return this[name](...operand) || opcode;
-      } else {
-        return this[name](operand) || opcode;
-      }
+      return this[name](...operand) || opcode;
     }
   }
 
@@ -133,10 +130,10 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
     return ['getSymbol', 0];
   }
 
-  getVar([name, context]: [string, ExpressionContext]): Op<
-    JavaScriptCompilerOps,
-    'getSymbol' | 'getFree' | 'getFreeWithContext'
-  > {
+  getVar(
+    name: string,
+    context: ExpressionContext
+  ): Op<JavaScriptCompilerOps, 'getSymbol' | 'getFree' | 'getFreeWithContext'> {
     if (this.symbols.has(name)) {
       let symbol = this.symbols.get(name);
       return ['getSymbol', symbol];
@@ -155,7 +152,7 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
   }
 
   debugger(_op: Option<InVariable[]>): Op<JavaScriptCompilerOps, 'debugger'> {
-    return ['debugger', this.symbols.getEvalInfo()];
+    return ['debugger', [this.symbols.getEvalInfo()]];
   }
 
   hasBlock(op: InVariable): Op<JavaScriptCompilerOps, 'hasBlock'> {
@@ -175,7 +172,7 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
   }
 
   partial(): Op<JavaScriptCompilerOps, 'partial'> {
-    return ['partial', this.symbols.getEvalInfo()];
+    return ['partial', [this.symbols.getEvalInfo()]];
   }
 
   block(hasInverse: boolean): Op<JavaScriptCompilerOps, 'block'> {
@@ -202,7 +199,7 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
     return ['openComponent', element];
   }
 
-  openElement([element, simple]: [AST.ElementNode, boolean]): Out {
+  openElement(element: AST.ElementNode, simple: boolean): Out {
     return ['openElement', [element, simple]];
   }
 
@@ -214,27 +211,27 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
     return ['dynamicArg', name];
   }
 
-  staticAttr([name, ns]: [string, Option<string>]) {
+  staticAttr(name: string, ns: Option<string>) {
     return ['staticAttr', [name, ns]];
   }
 
-  staticComponentAttr([name, ns]: [string, Option<string>]) {
+  staticComponentAttr(name: string, ns: Option<string>) {
     return ['staticComponentAttr', [name, ns]];
   }
 
-  trustingAttr([name, ns]: [string, Option<string>]) {
+  trustingAttr(name: string, ns: Option<string>) {
     return ['trustingAttr', [name, ns]];
   }
 
-  dynamicAttr([name, ns]: [string, Option<string>]) {
+  dynamicAttr(name: string, ns: Option<string>) {
     return ['dynamicAttr', [name, ns]];
   }
 
-  componentAttr([name, ns]: [string, Option<string>]) {
+  componentAttr(name: string, ns: Option<string>) {
     return ['componentAttr', [name, ns]];
   }
 
-  trustingComponentAttr([name, ns]: [string, Option<string>]) {
+  trustingComponentAttr(name: string, ns: Option<string>) {
     return ['trustingComponentAttr', [name, ns]];
   }
 

@@ -1,6 +1,11 @@
 import { preprocess } from '@glimmer/syntax';
 import TemplateCompiler, { CompileOptions } from './template-compiler';
-import { Option, TemplateJavascript, SerializedTemplateWithLazyBlock } from '@glimmer/interfaces';
+import {
+  Option,
+  TemplateJavascript,
+  SerializedTemplateWithLazyBlock,
+  SerializedTemplate,
+} from '@glimmer/interfaces';
 import { PreprocessOptions } from '@glimmer/syntax';
 import { visit2 } from './direct-visitor';
 import { SymbolAllocator } from './allocate-symbols';
@@ -60,8 +65,8 @@ const defaultOptions: PrecompileOptions = {
  * @param {string} string a Glimmer template string
  * @return {string} a template javascript string
  */
-export function precompile(string: string, options?: PrecompileOptions): TemplateJavascript;
-export function precompile(
+export function precompile1(string: string, options?: PrecompileOptions): TemplateJavascript;
+export function precompile1(
   string: string,
   options: PrecompileOptions = defaultOptions
 ): TemplateJavascript {
@@ -94,8 +99,47 @@ export function precompile(
  * @param {string} string a Glimmer template string
  * @return {string} a template javascript string
  */
-export function precompile2(string: string, options?: PrecompileOptions): TemplateJavascript;
-export function precompile2(
+export function precompileJSON(
+  string: string,
+  options?: PrecompileOptions
+): SerializedTemplate<unknown>;
+export function precompileJSON(
+  string: string,
+  options: PrecompileOptions = defaultOptions
+): SerializedTemplate<unknown> {
+  let ast = preprocess(string, options);
+  let { meta } = options;
+  let opcodes = visit2(ast, string);
+  let { ops } = new SymbolAllocator(opcodes, null).process();
+
+  let template = JavaScriptCompiler.process(ops, [], ast.symbols!, options);
+
+  if (LOCAL_SHOULD_LOG) {
+    console.log(`Template ->`, template);
+  }
+
+  return {
+    block: template.block.toJSON(),
+    meta,
+  };
+}
+
+/*
+ * Compile a string into a template javascript string.
+ *
+ * Example usage:
+ *     import { precompile } from '@glimmer/compiler';
+ *     import { templateFactory } from 'glimer-runtime';
+ *     let templateJs = precompile("Howdy {{name}}");
+ *     let factory = templateFactory(new Function("return " + templateJs)());
+ *     let template = factory.create(env);
+ *
+ * @method precompile
+ * @param {string} string a Glimmer template string
+ * @return {string} a template javascript string
+ */
+export function precompile(string: string, options?: PrecompileOptions): TemplateJavascript;
+export function precompile(
   string: string,
   options: PrecompileOptions = defaultOptions
 ): TemplateJavascript {

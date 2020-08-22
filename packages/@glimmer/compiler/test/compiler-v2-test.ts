@@ -5,7 +5,6 @@ import {
   SerializedTemplateBlock,
   SerializedTemplateWithLazyBlock,
 } from '@glimmer/interfaces';
-import { preprocess } from '@glimmer/syntax';
 import { assign, strip } from '@glimmer/util';
 import {
   Builder,
@@ -13,10 +12,9 @@ import {
   buildStatements,
   c,
   NEWLINE,
-  precompile2,
+  precompile,
   ProgramSymbols,
   s,
-  TemplateVisitor,
   unicode,
   WireFormatDebugger,
 } from '..';
@@ -25,7 +23,7 @@ QUnit.module('@glimmer/compiler(wip) - compiling source to wire format');
 
 function compile(content: string): SerializedTemplate<unknown> {
   let parsed = (JSON.parse(
-    precompile2(content, { meta: null })
+    precompile(content, { meta: null })
   ) as unknown) as SerializedTemplateWithLazyBlock<unknown>;
   let block = JSON.parse(parsed.block);
 

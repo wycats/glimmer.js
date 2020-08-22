@@ -1,5 +1,5 @@
 import { ASTPluginBuilder, preprocess } from '@glimmer/syntax';
-import { TemplateCompiler } from '@glimmer/compiler';
+import { precompile, TemplateCompiler } from '@glimmer/compiler';
 import { expect } from '@glimmer/util';
 import {
   ProgramSymbolTable,
@@ -29,6 +29,7 @@ import BundleCompilerDelegate from './delegate';
 import BundleCompilerLookup from './lookup';
 import { HeapImpl } from '@glimmer/program';
 import { syntaxCompilationContext } from '@glimmer/opcode-compiler';
+import { precompileJSON } from '@glimmer/compiler';
 
 export interface BundleCompileOptions {
   plugins: ASTPluginBuilder[];
@@ -206,9 +207,8 @@ export default class BundleCompiler {
 
   preprocess(locator: ModuleLocator, input: string): SerializedTemplateBlock {
     let options = { meta: locator, plugins: { ast: this.plugins } };
-    let ast = preprocess(input, options);
-    let template = TemplateCompiler.compile(ast, input);
-    return template.toJSON();
+    let { block } = precompileJSON(input, options);
+    return block;
   }
 
   compilerModuleLocatorResolver(): BundleCompilerLookup<ModuleLocator> {

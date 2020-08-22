@@ -1,6 +1,6 @@
-import { ExpressionContext } from '@glimmer/interfaces';
-import { AST, isLiteral } from '@glimmer/syntax';
-import { assert, assertNever, NonemptyStack } from '@glimmer/util';
+import { ExpressionContext, Option } from '@glimmer/interfaces';
+import { AST, isLiteral, SyntaxError } from '@glimmer/syntax';
+import { assert, assertNever, NonemptyStack, symbol } from '@glimmer/util';
 import {
   AllocateSymbolsOp,
   HirExpressionOp,
@@ -14,6 +14,7 @@ import {
 import {
   assertIsSimpleHelper,
   DEBUGGER,
+  hasPath,
   HAS_BLOCK,
   HAS_BLOCK_PARAMS,
   isHelperInvocation,
@@ -26,6 +27,7 @@ import {
 } from './is-node';
 import { locationToOffset } from './location';
 import { ProgramSymbolTable, SymbolTable } from './template-visitor';
+import { getAttrNamespace } from './utils';
 
 type HirStatements = {
   [P in keyof HirStatementOps]: (node: AST.Nodes[P], source: string) => HirStatementOp<P>;
@@ -85,7 +87,7 @@ const HirExpressions: CompilerVisitor<AST.Expression | AST.ConcatStatement> = {
   },
 };
 
-const HirStatements: CompilerVisitor<AST.TopLevelStatement | AST.Template> = {
+const HirStatements: CompilerVisitor<TopLevelStatement> = {
   PartialStatement(): never {
     throw new Error(`Handlebars partials are not supported in Glimmer`);
   },
@@ -94,7 +96,7 @@ const HirStatements: CompilerVisitor<AST.TopLevelStatement | AST.Template> = {
     program.symbols = ctx.symbols.current as ProgramSymbolTable;
     return ops(
       ctx.opcode(program, 'startProgram', program),
-      flatMap(program.body, statement => ctx.stmt(statement)),
+      flatMap(program.body as TopLevelStatement[], statement => ctx.stmt(statement)),
       ctx.opcode(program, 'endProgram')
     );
   },
@@ -103,14 +105,10 @@ const HirStatements: CompilerVisitor<AST.TopLevelStatement | AST.Template> = {
     return [
       ...ctx.startBlock(block),
       ctx.opcode(block, 'startBlock', block),
-      ...flatMap(block.body, statement => ctx.stmt(statement)),
+      ...flatMap(block.body as TopLevelStatement[], statement => ctx.stmt(statement)),
       ctx.opcode(block, 'endBlock'),
       ...ctx.endBlock(),
     ];
-  },
-
-  AttrNode(block: AST.AttrNode, ctx: CompilerContext): Opcode[] {
-    throw new Error('not implemented');
   },
 
   BlockStatement(block: AST.BlockStatement, ctx: CompilerContext): Opcode[] {
@@ -124,13 +122,69 @@ const HirStatements: CompilerVisitor<AST.TopLevelStatement | AST.Template> = {
   },
 
   ElementNode(element: AST.ElementNode, ctx: CompilerContext): Opcode[] {
+    let classify = classifyElement(element, ctx.symbols.current);
+
+    // are `@args` are allowed?
+    let hasComponentFeatures =
+      classify.is === 'component' || classify.is === 'dynamic' || classify.is === 'dynamic-tag';
+
+    function open(): Opcode[] {
+      switch (classify.is) {
+        case 'dynamic-tag':
+          return ops(
+            ctx.expr(classify.path, ExpressionContext.ComponentHead),
+            ctx.opcode(element, 'openComponent', element)
+          );
+
+        case 'named-block':
+          return ops(ctx.opcode(element, 'openNamedBlock', element));
+
+        case 'component':
+          return ops(ctx.opcode(element, 'openComponent', element));
+
+        case 'dynamic':
+          return ops(ctx.opcode(element, 'openElement', element, false));
+
+        case 'html':
+          return ops(ctx.opcode(element, 'openElement', element, true));
+      }
+    }
+
+    let opcodes = open();
+
+    function close(): Opcode {
+      switch (classify.is) {
+        case 'dynamic-tag':
+          return ctx.opcode(element, 'closeDynamicComponent', element);
+
+        case 'named-block':
+          return ctx.opcode(element, 'closeNamedBlock', element);
+
+        case 'component':
+          return ctx.opcode(element, 'closeComponent', element);
+
+        case 'dynamic':
+        case 'html':
+          return ctx.opcode(element, 'closeElement', element);
+      }
+    }
+
+    if (classify.is !== 'named-block') {
+      opcodes.push(
+        ...flatMap(element.attributes, attr =>
+          ctx.helper.attr(attr, hasComponentFeatures, element)
+        ),
+        ...flatMap(element.modifiers, modifier => ctx.helper.modifier(modifier)),
+        ctx.opcode(element, 'flushElement', element)
+      );
+    }
+
     return [
-      ctx.opcode(element, 'openElement', element, true),
-      ctx.opcode(element, 'flushElement', element),
+      ...opcodes,
       ...ctx.startBlock(element),
-      ...flatMap(element.children, statement => ctx.stmt(statement)),
-      ctx.opcode(element, 'closeElement', element),
+      ...flatMap(element.children as TopLevelStatement[], statement => ctx.stmt(statement)),
       ...ctx.endBlock(),
+      close(),
     ];
   },
 
@@ -148,28 +202,30 @@ const HirStatements: CompilerVisitor<AST.TopLevelStatement | AST.Template> = {
       ];
     }
 
-    if (!isHelperInvocation(mustache)) {
-      return [
-        ...ctx.expr(mustache.path, mustacheContext(mustache.path)),
-        ctx.opcode(mustache, 'append', !mustache.escaped),
-      ];
-    }
+    if (hasPath(mustache)) {
+      if (YIELD.match(mustache)) {
+        return YIELD.opcode(mustache, ctx);
+      }
 
-    if (YIELD.match(mustache)) {
-      return YIELD.opcode(mustache, ctx);
-    }
+      if (PARTIAL.match(mustache)) {
+        return PARTIAL.opcode(mustache, ctx);
+      }
 
-    if (PARTIAL.match(mustache)) {
-      return PARTIAL.opcode(mustache, ctx);
-    }
-
-    if (DEBUGGER.match(mustache)) {
-      return DEBUGGER.opcode(mustache, ctx);
+      if (DEBUGGER.match(mustache)) {
+        return DEBUGGER.opcode(mustache, ctx);
+      }
     }
 
     // {{has-block}} or {{has-block-params}}
     if (isKeywordCall(mustache)) {
       return [...ctx.helper.keyword(mustache), ctx.opcode(mustache, 'append', !mustache.escaped)];
+    }
+
+    if (!isHelperInvocation(mustache)) {
+      return [
+        ...ctx.expr(mustache.path, mustacheContext(mustache.path)),
+        ctx.opcode(mustache, 'append', !mustache.escaped),
+      ];
     }
 
     return [
@@ -188,6 +244,19 @@ const HirStatements: CompilerVisitor<AST.TopLevelStatement | AST.Template> = {
     return ctx.opcode(comment, 'comment', comment.value);
   },
 };
+
+function assertValidArgumentName(
+  attribute: AST.AttrNode,
+  isComponent: boolean,
+  elementNode: AST.ElementNode
+) {
+  if (!isComponent && attribute.name[0] === '@') {
+    throw new SyntaxError(
+      `${attribute.name} is not a valid attribute name. @arguments are only allowed on components, but the tag for this element (\`${elementNode.tag}\`) is a regular, non-component HTML element.`,
+      attribute.loc
+    );
+  }
+}
 
 function mustacheContext(body: AST.Expression): ExpressionContext {
   if (body.type === 'PathExpression') {
@@ -241,6 +310,13 @@ class HirVisitor<N extends AST.Node> {
 }
 
 /**
+ * In reality, AttrNode does not appear as a statement in top-level content, but rather
+ * only nested inside of a specific part of the ElementNode, so we can handle it (in
+ * context) there and not have to worry about generically seeing one of them in content.
+ */
+type TopLevelStatement = AST.Statement | AST.Template | AST.Block;
+
+/**
  * All state in this object except the symbol table must be readonly.
  *
  * This object, and not a copy of it, must be passed around to helper functions. The
@@ -248,7 +324,7 @@ class HirVisitor<N extends AST.Node> {
  * has no mutable state at all.
  */
 export class CompilerContext {
-  readonly statements: HirVisitor<AST.TopLevelStatement>;
+  readonly statements: HirVisitor<TopLevelStatement>;
   readonly expressions: HirVisitor<AST.Expression>;
   readonly symbols: NonemptyStack<SymbolTable> = new NonemptyStack([SymbolTable.top()]);
 
@@ -294,7 +370,7 @@ export class CompilerContext {
     }
   }
 
-  stmt<T extends AST.TopLevelStatement>(node: T | null): Opcode[] {
+  stmt<T extends TopLevelStatement>(node: T | null): Opcode[] {
     if (node === null) {
       return [];
     } else {
@@ -307,7 +383,7 @@ export class CompilerContext {
     key: K,
     ...rest: Tail<O>
   ): Opcode<K> {
-    let opcode = ([key, ...rest] as unknown) as AllocateSymbolsOp<K>;
+    let opcode = ([key, rest] as unknown) as AllocateSymbolsOp<K>;
 
     if ('type' in node || Array.isArray(node)) {
       return { opcode, location: sourceLocation(node, this.source) };
@@ -354,6 +430,47 @@ export class CompilerHelper {
 
   stmt<T extends AST.Statement>(node: T): Opcode[] {
     return this.ctx.stmt(node);
+  }
+
+  attr(attr: AST.AttrNode, isComponent: boolean, elementNode: AST.ElementNode): Opcode[] {
+    assertValidArgumentName(attr, isComponent, elementNode);
+    let { name, value } = attr;
+
+    let namespace = getAttrNamespace(name);
+    let { opcodes, isStatic } = this.attrValue(value);
+
+    if (name.charAt(0) === '@') {
+      // Arguments
+      if (isStatic) {
+        return ops(opcodes, this.opcode(attr, 'staticArg', name));
+      } else {
+        return ops(opcodes, this.opcode(attr, 'dynamicArg', name));
+      }
+    } else {
+      let isTrusting = isTrustedValue(value);
+
+      if (isStatic) {
+        if (name === '...attributes') {
+          return ops(opcodes, this.opcode(attr, 'attrSplat'));
+        } else if (isComponent) {
+          return ops(opcodes, this.opcode(attr, 'staticComponentAttr', name, namespace));
+        } else {
+          return ops(opcodes, this.opcode(attr, 'staticAttr', name, namespace));
+        }
+      } else if (isTrusting) {
+        if (isComponent) {
+          return ops(opcodes, this.opcode(attr, 'trustingComponentAttr', name, namespace));
+        } else {
+          return ops(opcodes, this.opcode(attr, 'trustingAttr', name, namespace));
+        }
+      } else {
+        if (isComponent) {
+          return ops(opcodes, this.opcode(attr, 'componentAttr', name, namespace));
+        } else {
+          return ops(opcodes, this.opcode(attr, 'dynamicAttr', name, namespace));
+        }
+      }
+    }
   }
 
   modifier(modifier: AST.ElementModifierStatement): Opcode[] {
@@ -414,7 +531,6 @@ export class CompilerHelper {
 
       opcodes.push(...this.args(expr, 'helper'));
 
-      // TODO: We need to pass ExpressionContext through here or find an alternative path
       opcodes.push(...this.expr(expr.path, ExpressionContext.CallHead));
       opcodes.push(this.opcode(expr, 'helper'));
 
@@ -423,33 +539,47 @@ export class CompilerHelper {
   }
 
   concat(concat: AST.ConcatStatement): Opcode[] {
-    let opcodes = flatMap(concat.parts, part => this.mustacheAttrValue(part));
+    let opcodes = flatMap([...concat.parts].reverse(), part => this.attrValue(part).opcodes);
 
     opcodes.push(this.opcode(concat, 'prepareArray', concat.parts.length));
     return opcodes;
   }
 
-  mustacheAttrValue(value: AST.TextNode | AST.MustacheStatement): Opcode[] {
+  attrValue(
+    value: AST.TextNode | AST.MustacheStatement | AST.ConcatStatement
+  ): { opcodes: Opcode[]; isStatic: boolean } {
+    if (value.type === 'ConcatStatement') {
+      return { opcodes: ops(this.concat(value), this.opcode(value, 'concat')), isStatic: false };
+    }
+
+    // returns the static value if the value is static
     if (value.type === 'TextNode') {
-      return [this.opcode(value, 'literal', value.chars)];
+      return { opcodes: [this.opcode(value, 'literal', value.chars)], isStatic: true };
     }
 
     if (isKeywordCall(value)) {
-      return this.keyword(value);
+      return { opcodes: this.keyword(value), isStatic: false };
     }
 
     if (isHelperInvocation(value)) {
       assertIsSimpleHelper(value, value.loc, 'helper');
 
-      return this.args(value, 'helper');
+      return {
+        opcodes: ops(
+          this.args(value, 'helper'),
+          this.expr(value.path, ExpressionContext.CallHead),
+          this.opcode(value, 'helper')
+        ),
+        isStatic: false,
+      };
     }
 
     if (value.path.type === 'PathExpression' && isSimplePath(value.path)) {
       // x={{simple}}
-      return this.expr(value.path, ExpressionContext.AppendSingleId);
+      return { opcodes: this.expr(value.path, ExpressionContext.AppendSingleId), isStatic: false };
     } else {
       // x={{simple.value}}
-      return this.expr(value.path, ExpressionContext.Expression);
+      return { opcodes: this.expr(value.path, ExpressionContext.Expression), isStatic: false };
     }
   }
 
@@ -485,7 +615,7 @@ export class CompilerHelper {
     if (rest.length === 0) {
       return [head];
     } else {
-      let tailOp = this.opcode(node, 'getPath', rest);
+      let tailOp = this.opcode(node, 'getPath', [rest]);
       return [head, tailOp];
     }
   }
@@ -515,6 +645,159 @@ export function visit2(ast: AST.Template, source: string): Opcode[] {
   let compiler = CompilerHelper.forSource(source);
   return compiler.root(ast);
 }
+
+function isTrustedValue(value: any) {
+  return value.escaped !== undefined && !value.escaped;
+}
+
+/** COMPONENT STUFF **/
+
+type ClassifiedElement =
+  | {
+      is: 'dynamic-tag';
+      path: AST.PathExpression;
+    }
+  | {
+      is: 'component';
+    }
+  | { is: 'dynamic' }
+  | { is: 'named-block' }
+  | { is: 'html' };
+
+function classifyElement(element: AST.ElementNode, symbols: SymbolTable): ClassifiedElement {
+  let open = element.tag.charAt(0);
+
+  let [maybeLocal, ...rest] = element.tag.split('.');
+  let isNamedArgument = open === '@';
+  // let isLocal = symbols.has(maybeLocal);
+  let isThisPath = maybeLocal === 'this';
+
+  if (isNamedBlock(element)) {
+    return { is: 'named-block' };
+  }
+
+  if (isNamedArgument) {
+    return {
+      is: 'dynamic-tag',
+      path: {
+        type: 'PathExpression',
+        data: true,
+        parts: [maybeLocal.slice(1), ...rest],
+        this: false,
+        original: element.tag,
+        loc: element.loc,
+      },
+    };
+  }
+
+  if (isThisPath) {
+    return {
+      is: 'dynamic-tag',
+      path: {
+        type: 'PathExpression',
+        data: false,
+        parts: rest,
+        this: true,
+        original: element.tag,
+        loc: element.loc,
+      },
+    };
+  }
+
+  if (symbols.has(maybeLocal)) {
+    return {
+      is: 'dynamic-tag',
+      path: {
+        type: 'PathExpression',
+        data: false,
+        parts: [maybeLocal, ...rest],
+        this: false,
+        original: element.tag,
+        loc: element.loc,
+      },
+    };
+  }
+
+  if (open === open.toUpperCase() && open !== open.toLowerCase()) {
+    return { is: 'component' };
+  }
+
+  if (isHTMLElement(element)) {
+    // we're looking at an element with no component features
+    // (no modifiers, no splattributes)
+    return { is: 'html' };
+  } else {
+    return { is: 'dynamic' };
+  }
+}
+
+// function destructureDynamicComponent(
+//   element: AST.ElementNode,
+//   symbols: SymbolTable
+// ): Option<AST.PathExpression> {
+//   let open = element.tag.charAt(0);
+
+//   let [maybeLocal, ...rest] = element.tag.split('.');
+//   let isNamedArgument = open === '@';
+//   let isLocal = symbols.has(maybeLocal);
+//   let isThisPath = maybeLocal === 'this';
+
+//   if (isLocal) {
+//     return {
+//       type: 'PathExpression',
+//       data: false,
+//       parts: [maybeLocal, ...rest],
+//       this: false,
+//       original: element.tag,
+//       loc: element.loc,
+//     };
+//   } else if (isNamedArgument) {
+//     return {
+//       type: 'PathExpression',
+//       data: true,
+//       parts: [maybeLocal.slice(1), ...rest],
+//       this: false,
+//       original: element.tag,
+//       loc: element.loc,
+//     };
+//   } else if (isThisPath) {
+//     return {
+//       type: 'PathExpression',
+//       data: false,
+//       parts: rest,
+//       this: true,
+//       original: element.tag,
+//       loc: element.loc,
+//     };
+//   } else {
+//     return null;
+//   }
+// }
+
+function isHTMLElement(element: AST.ElementNode): boolean {
+  let { attributes, modifiers } = element;
+
+  if (modifiers.length > 0) {
+    return false;
+  }
+
+  return !attributes.find(attr => attr.name === '...attributes');
+}
+
+// function isComponent(element: AST.ElementNode, symbols: SymbolTable): boolean {
+//   let open = element.tag.charAt(0);
+//   let isPath = element.tag.indexOf('.') > -1;
+
+//   let isUpperCase = open === open.toUpperCase() && open !== open.toLowerCase();
+
+//   return (isUpperCase && !isPath) || !!destructureDynamicComponent(element, symbols);
+// }
+
+function isNamedBlock(element: AST.ElementNode): boolean {
+  return element.tag[0] === ':';
+}
+
+/** LOCATION STUFF **/
 
 function locationForHashKey(pair: AST.HashPair, source: string): SourceLocation {
   let pairLoc = sourceLocation(pair, source);

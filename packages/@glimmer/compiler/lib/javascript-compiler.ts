@@ -213,7 +213,12 @@ export default class JavaScriptCompiler implements Processor<JavaScriptCompilerO
       if (!this[opcode]) {
         throw new Error(`unimplemented ${opcode} on JavaScriptCompiler`);
       }
-      (this[opcode] as any)(arg);
+
+      if (Array.isArray(arg)) {
+        (this[opcode] as any)(...arg);
+      } else {
+        (this[opcode] as any)(arg);
+      }
     });
     return this.template;
   }
@@ -315,7 +320,7 @@ export default class JavaScriptCompiler implements Processor<JavaScriptCompilerO
     this.blocks.push(block);
   }
 
-  openElement([element, simple]: [AST.ElementNode, boolean]) {
+  openElement(element: AST.ElementNode, simple: boolean) {
     let tag = element.tag;
 
     if (element.blockParams.length > 0) {
@@ -354,14 +359,14 @@ export default class JavaScriptCompiler implements Processor<JavaScriptCompilerO
     this.push([SexpOpcodes.CloseElement]);
   }
 
-  staticAttr([name, namespace]: [string, string?]) {
+  staticAttr(name: string, namespace?: string) {
     let value = this.popValue<string>();
     let op: Statements.StaticAttr = [SexpOpcodes.StaticAttr, deflateAttrName(name), value];
     if (namespace) op.push(namespace);
     this.push(op);
   }
 
-  staticComponentAttr([name, namespace]: [string, string?]) {
+  staticComponentAttr(name: string, namespace?: string) {
     let value = this.popValue<string>();
     let op: Statements.StaticComponentAttr = [
       SexpOpcodes.StaticComponentAttr,
@@ -372,21 +377,21 @@ export default class JavaScriptCompiler implements Processor<JavaScriptCompilerO
     this.push(op);
   }
 
-  dynamicAttr([name, namespace]: [string, string?]) {
+  dynamicAttr(name: string, namespace?: string) {
     let value = this.popValue<Expression>();
     let op: Statements.DynamicAttr = [SexpOpcodes.DynamicAttr, deflateAttrName(name), value];
     if (namespace) op.push(namespace);
     this.push(op);
   }
 
-  componentAttr([name, namespace]: [string, string?]) {
+  componentAttr(name: string, namespace?: string) {
     let value = this.popValue<Expression>();
     let op: Statements.ComponentAttr = [SexpOpcodes.ComponentAttr, deflateAttrName(name), value];
     if (namespace) op.push(namespace);
     this.push(op);
   }
 
-  trustingAttr([name, namespace]: [string, string?]) {
+  trustingAttr(name: string, namespace?: string) {
     let value = this.popValue<Expression>();
     let op: Statements.TrustingAttr = [
       SexpOpcodes.TrustingDynamicAttr,
@@ -397,7 +402,7 @@ export default class JavaScriptCompiler implements Processor<JavaScriptCompilerO
     this.push(op);
   }
 
-  trustingComponentAttr([name, namespace]: [string, string?]) {
+  trustingComponentAttr(name: string, namespace?: string) {
     let value = this.popValue<Expression>();
     let op: Statements.TrustingComponentAttr = [
       SexpOpcodes.TrustingComponentAttr,
@@ -475,7 +480,7 @@ export default class JavaScriptCompiler implements Processor<JavaScriptCompilerO
     this.pushValue<Expressions.GetFree>([SexpOpcodes.GetFree, head]);
   }
 
-  getFreeWithContext([head, context]: [number, ExpressionContext]) {
+  getFreeWithContext(head: number, context: ExpressionContext) {
     this.pushValue<Expressions.GetContextualFree>([expressionContextOp(context), head]);
   }
 

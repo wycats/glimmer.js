@@ -1,4 +1,10 @@
-export { defaultId, precompile, precompile2, PrecompileOptions } from './lib/compiler';
+export {
+  defaultId,
+  precompile1,
+  precompile,
+  precompileJSON,
+  PrecompileOptions,
+} from './lib/compiler';
 export {
   ProgramSymbols,
   buildStatement,

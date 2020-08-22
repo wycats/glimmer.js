@@ -19,7 +19,7 @@ export type IsKeywordCall =
   | KeywordExpressionNode<'has-block-params'>;
 
 export function isKeywordCall(node: AST.Call): node is IsKeywordCall {
-  return isHelperInvocation(node) && (HAS_BLOCK.match(node) || HAS_BLOCK_PARAMS.match(node));
+  return hasPath(node) && (HAS_BLOCK.match(node) || HAS_BLOCK_PARAMS.match(node));
 }
 
 export function isPath(node: AST.Node | AST.PathExpression): node is AST.PathExpression {
@@ -36,6 +36,10 @@ export interface HelperInvocation extends AST.Call {
 
 export type HelperStatement = HelperInvocation & AST.MustacheStatement;
 export type HelperExpression = HelperInvocation & AST.Call;
+
+export function hasPath(node: AST.Call): node is HelperInvocation {
+  return node.path.type === 'PathExpression';
+}
 
 export function isHelperInvocation(node: AST.Call): node is HelperInvocation {
   // if (mustache.type !== 'SubExpression' && mustache.type !== 'MustacheStatement') {
