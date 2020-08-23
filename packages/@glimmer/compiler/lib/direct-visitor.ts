@@ -1,6 +1,6 @@
 import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST, isLiteral, SyntaxError } from '@glimmer/syntax';
-import { assert, assertNever, NonemptyStack, symbol } from '@glimmer/util';
+import { assert, assertNever, NonemptyStack } from '@glimmer/util';
 import {
   AllocateSymbolsOp,
   HirExpressionOp,
@@ -17,6 +17,7 @@ import {
   hasPath,
   HAS_BLOCK,
   HAS_BLOCK_PARAMS,
+  IN_ELEMENT,
   isHelperInvocation,
   isKeywordCall,
   IsKeywordCall,
@@ -112,13 +113,17 @@ const HirStatements: CompilerVisitor<TopLevelStatement> = {
   },
 
   BlockStatement(block: AST.BlockStatement, ctx: CompilerContext): Opcode[] {
-    return [
-      ...ctx.helper.args(block, 'block'),
-      ...ctx.expr(block.path, ExpressionContext.BlockHead),
-      ...ctx.stmt(block.inverse || null),
-      ...ctx.stmt(block.program),
-      ctx.opcode(block, 'block', !!block.inverse),
-    ];
+    if (IN_ELEMENT.match(block)) {
+      return IN_ELEMENT.opcode(block, ctx);
+    } else {
+      return ops(
+        ctx.helper.args(block),
+        ctx.expr(block.path, ExpressionContext.BlockHead),
+        ctx.stmt(block.inverse || null),
+        ctx.stmt(block.program),
+        ctx.opcode(block, 'block', !!block.inverse)
+      );
+    }
   },
 
   ElementNode(element: AST.ElementNode, ctx: CompilerContext): Opcode[] {
@@ -171,7 +176,7 @@ const HirStatements: CompilerVisitor<TopLevelStatement> = {
 
     if (classify.is !== 'named-block') {
       opcodes.push(
-        ...flatMap(element.attributes, attr =>
+        ...flatMap(attributes(element.attributes), attr =>
           ctx.helper.attr(attr, hasComponentFeatures, element)
         ),
         ...flatMap(element.modifiers, modifier => ctx.helper.modifier(modifier)),
@@ -229,7 +234,7 @@ const HirStatements: CompilerVisitor<TopLevelStatement> = {
     }
 
     return [
-      ...ctx.helper.args(mustache, 'helper'),
+      ...ctx.helper.args(mustache),
       ...ctx.expr(mustache.path, ExpressionContext.CallHead),
       ctx.opcode(mustache, 'helper'),
       ctx.opcode(mustache, 'append', !mustache.escaped),
@@ -244,6 +249,25 @@ const HirStatements: CompilerVisitor<TopLevelStatement> = {
     return ctx.opcode(comment, 'comment', comment.value);
   },
 };
+
+function attributes(attrs: AST.AttrNode[]): AST.AttrNode[] {
+  let out = [];
+  let typeAttr: Option<AST.AttrNode> = null;
+
+  for (let attr of attrs) {
+    if (attr.name === 'type') {
+      typeAttr = attr;
+    } else {
+      out.push(attr);
+    }
+  }
+
+  if (typeAttr) {
+    out.push(typeAttr);
+  }
+
+  return out;
+}
 
 function assertValidArgumentName(
   attribute: AST.AttrNode,
@@ -278,7 +302,11 @@ function ops(first: Opcodes, ...opcodes: Opcodes[]): Opcode[] {
   let out: Opcode[] = [];
 
   if (Array.isArray(first)) {
-    out.push(...ops(...first));
+    if (first.length === 0) {
+      return out;
+    } else {
+      out.push(...ops(...first));
+    }
   } else {
     out.push(first);
   }
@@ -317,7 +345,19 @@ class HirVisitor<N extends AST.Node> {
 type TopLevelStatement = AST.Statement | AST.Template | AST.Block;
 
 /**
- * All state in this object except the symbol table must be readonly.
+ * This is the mutable state for this compiler pass.
+ */
+export class CompilerState {
+  readonly symbols: NonemptyStack<SymbolTable> = new NonemptyStack([SymbolTable.top()]);
+  private cursorCount = 0;
+
+  cursor() {
+    return `%cursor:${this.cursorCount++}%`;
+  }
+}
+
+/**
+ * All state in this object except the CompilerState must be readonly.
  *
  * This object, and not a copy of it, must be passed around to helper functions. The
  * `CompilerHelper`, on the other hand, does not need to share an identity since it
@@ -326,13 +366,20 @@ type TopLevelStatement = AST.Statement | AST.Template | AST.Block;
 export class CompilerContext {
   readonly statements: HirVisitor<TopLevelStatement>;
   readonly expressions: HirVisitor<AST.Expression>;
-  readonly symbols: NonemptyStack<SymbolTable> = new NonemptyStack([SymbolTable.top()]);
-
+  readonly state = new CompilerState();
   readonly helper = new CompilerHelper(this);
 
   constructor(readonly source: string) {
     this.statements = new HirVisitor(HirStatements);
     this.expressions = new HirVisitor(HirExpressions);
+  }
+
+  get symbols() {
+    return this.state.symbols;
+  }
+
+  cursor(): string {
+    return this.state.cursor();
   }
 
   startBlock(block: AST.Block | AST.ElementNode): [] {
@@ -475,22 +522,30 @@ export class CompilerHelper {
 
   modifier(modifier: AST.ElementModifierStatement): Opcode[] {
     return [
-      ...this.args(modifier, 'modifier'),
+      ...this.args(modifier),
       ...this.ctx.expr(modifier.path, ExpressionContext.ModifierHead),
       this.opcode(modifier, 'modifier'),
     ];
   }
 
-  args(helper: AST.Call, context: 'helper' | 'modifier' | 'block' | 'in-element'): Opcode[] {
+  args({
+    path,
+    params,
+    hash,
+  }: {
+    path: AST.Expression;
+    params: AST.Expression[];
+    hash: AST.Hash;
+  }): Opcode[] {
     let opcodes: Opcode[] = [];
-    opcodes.push(...this.hash(helper.hash, context));
-    opcodes.push(...this.params(helper));
+    opcodes.push(...this.hash(hash));
+    opcodes.push(...this.params({ path, params }));
 
     return opcodes;
   }
 
-  params(call: AST.Call): Opcode[] {
-    let params = { list: call.params, loc: paramsLoc(call, this.ctx.source) };
+  params({ path, params: list }: { path: AST.Expression; params: AST.Expression[] }): Opcode[] {
+    let params = { list, loc: paramsLoc({ path, params: list }, this.ctx.source) };
 
     if (params.list.length === 0) {
       return [this.opcode(params, 'literal', null)];
@@ -505,7 +560,7 @@ export class CompilerHelper {
     return opcodes;
   }
 
-  hash(hash: AST.Hash, context: 'helper' | 'modifier' | 'block' | 'in-element'): Opcode[] {
+  hash(hash: AST.Hash): Opcode[] {
     let pairs = hash.pairs;
 
     if (pairs.length === 0) {
@@ -529,7 +584,7 @@ export class CompilerHelper {
     } else {
       let opcodes: Opcode[] = [];
 
-      opcodes.push(...this.args(expr, 'helper'));
+      opcodes.push(...this.args(expr));
 
       opcodes.push(...this.expr(expr.path, ExpressionContext.CallHead));
       opcodes.push(this.opcode(expr, 'helper'));
@@ -566,7 +621,7 @@ export class CompilerHelper {
 
       return {
         opcodes: ops(
-          this.args(value, 'helper'),
+          this.args(value),
           this.expr(value.path, ExpressionContext.CallHead),
           this.opcode(value, 'helper')
         ),
@@ -603,6 +658,9 @@ export class CompilerHelper {
     } else if (path.this) {
       return this.thisPath(parts, path);
     } else {
+      if (context === undefined) {
+        debugger;
+      }
       return this.varPath(parts[0], parts.slice(1), path, context);
     }
   }
@@ -615,7 +673,7 @@ export class CompilerHelper {
     if (rest.length === 0) {
       return [head];
     } else {
-      let tailOp = this.opcode(node, 'getPath', [rest]);
+      let tailOp = this.opcode(node, 'getPath', rest);
       return [head, tailOp];
     }
   }
@@ -813,7 +871,7 @@ function locationForHashKey(pair: AST.HashPair, source: string): SourceLocation 
   };
 }
 
-type Tail<A extends any[]> = ((...args: A) => any) extends (h: any, ...t: infer T) => any
+export type Tail<A extends any[]> = ((...args: A) => any) extends (h: any, ...t: infer T) => any
   ? T
   : never;
 
@@ -850,15 +908,19 @@ function sourceLocation(
   let startOffset = locationToOffset(source, start.line - 1, start.column);
 
   // TODO: Is it important to support buggy transformations? Should we have a strict mode to start ferreting them out?
-  assert(
-    startOffset !== null,
-    `unexpected offset (${start.line}:${start.column}) that didn't correspond to a source location`
-  );
+  // assert(
+  //   startOffset !== null,
+  //   `unexpected offset (${start.line}:${start.column}) that didn't correspond to a source location`
+  // );
   let endOffset = locationToOffset(source, end.line - 1, end.column);
-  assert(
-    endOffset !== null,
-    `unexpected offset (${end.line}:${end.column}) that didn't correspond to a source location`
-  );
+  // assert(
+  //   endOffset !== null,
+  //   `unexpected offset (${end.line}:${end.column}) that didn't correspond to a source location`
+  // );
+
+  if (startOffset === null || endOffset === null) {
+    return null;
+  }
 
   return {
     source: source || null,
@@ -867,9 +929,10 @@ function sourceLocation(
   };
 }
 
-function paramsLoc(helper: AST.Call, source: string): SourceLocation {
-  let { path, params } = helper;
-
+function paramsLoc(
+  { path, params }: { path: AST.Expression; params: AST.Expression[] },
+  source: string
+): SourceLocation {
   if (isPresent(params)) {
     return sourceLocation(params as [AST.Expression, ...AST.Expression[]], source);
   } else {

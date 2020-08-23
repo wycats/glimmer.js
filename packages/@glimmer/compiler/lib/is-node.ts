@@ -1,4 +1,5 @@
-import { AST, SyntaxError } from '@glimmer/syntax';
+import { AST, SyntaxError, builders } from '@glimmer/syntax';
+import { ExpressionContext } from '../../interfaces';
 import { Opcode } from './compiler-ops';
 import { CompilerContext } from './direct-visitor';
 
@@ -36,6 +37,7 @@ export interface HelperInvocation extends AST.Call {
 
 export type HelperStatement = HelperInvocation & AST.MustacheStatement;
 export type HelperExpression = HelperInvocation & AST.Call;
+export type HelperBlock = HelperInvocation & AST.BlockStatement;
 
 export function hasPath(node: AST.Call): node is HelperInvocation {
   return node.path.type === 'PathExpression';
@@ -95,6 +97,27 @@ interface KeywordDelegate<N extends AST.BaseNode, V> {
   opcode(node: N, ctx: CompilerContext, param: V): Opcode[];
 }
 
+interface KeywordBlockNode<K extends string> extends HelperBlock {
+  path: KeywordPathNode<K>;
+}
+
+class KeywordBlock<K extends string, V> {
+  constructor(private keyword: K, private delegate: KeywordDelegate<KeywordBlockNode<K>, V>) {}
+
+  match(mustache: AST.BlockStatement): mustache is KeywordBlockNode<K> {
+    if (mustache.path.type === 'PathExpression') {
+      return mustache.path.original === this.keyword;
+    } else {
+      return false;
+    }
+  }
+
+  opcode(mustache: KeywordBlockNode<K>, ctx: CompilerContext): Opcode[] {
+    let param = this.delegate.assert(mustache);
+    return this.delegate.opcode(mustache, ctx, param);
+  }
+}
+
 class KeywordStatement<K extends string, V> {
   constructor(private keyword: K, private delegate: KeywordDelegate<KeywordStatementNode<K>, V>) {}
 
@@ -124,6 +147,55 @@ class KeywordExpression<K extends string, V> {
     return this.delegate.opcode(mustache, ctx, param);
   }
 }
+
+export const IN_ELEMENT = new KeywordBlock('in-element', {
+  assert(statement: KeywordBlockNode<'in-element'>): boolean {
+    let { hash } = statement;
+
+    let hasInsertBefore = false;
+
+    for (let { key, value } of hash.pairs) {
+      if (key === 'guid') {
+        throw new SyntaxError(
+          `Cannot pass \`guid\` to \`{{#in-element}}\` on line ${value.loc.start.line}.`,
+          value.loc
+        );
+      }
+
+      if (key === 'insertBefore') {
+        hasInsertBefore = true;
+      }
+    }
+
+    return hasInsertBefore;
+  },
+
+  opcode(
+    block: KeywordBlockNode<'in-element'>,
+    ctx: CompilerContext,
+    hasInsertBefore: boolean
+  ): Opcode[] {
+    let pairs = [...block.hash.pairs];
+
+    pairs.push(builders.pair('guid', builders.string(ctx.cursor())));
+
+    if (!hasInsertBefore) {
+      pairs.push(builders.pair('insertBefore', builders.undefined()));
+    }
+
+    return [
+      ...ctx.helper.args({
+        path: block.path,
+        params: block.params,
+        hash: builders.hash(pairs, block.hash.loc),
+      }),
+      ...ctx.expr(block.path, ExpressionContext.BlockHead),
+      ...ctx.stmt(block.inverse || null),
+      ...ctx.stmt(block.program),
+      ctx.opcode(block, 'block', !!block.inverse),
+    ];
+  },
+});
 
 export const YIELD = new KeywordStatement('yield', {
   assert(statement: KeywordStatementNode<'yield'>): string {

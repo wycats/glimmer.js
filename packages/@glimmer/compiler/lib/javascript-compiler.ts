@@ -205,20 +205,14 @@ export default class JavaScriptCompiler implements Processor<JavaScriptCompilerO
 
   process(): Template {
     this.opcodes.forEach((op, i) => {
-      let opcode = op[0];
+      let [opcode, ...arg] = op;
       this.location = this.locations[i];
-
-      let arg = op[1];
 
       if (!this[opcode]) {
         throw new Error(`unimplemented ${opcode} on JavaScriptCompiler`);
       }
 
-      if (Array.isArray(arg)) {
-        (this[opcode] as any)(...arg);
-      } else {
-        (this[opcode] as any)(arg);
-      }
+      this[opcode as any](...arg);
     });
     return this.template;
   }

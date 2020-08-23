@@ -3,7 +3,7 @@ import {
   Op,
   StatementCompileActions,
   MacroBlocks,
-  MacroInlines,
+  MacroInlines,, Expressions
 } from '@glimmer/interfaces';
 import { InvokeStaticBlock, InvokeStaticBlockWithStack } from '../opcode-builder/helpers/blocks';
 import { assert, unwrap } from '@glimmer/util';
@@ -171,15 +171,23 @@ export function populateBuiltins(
 
         let actions: StatementCompileActions = [];
 
+        let insertBefore: Expressions.Expression;
+        let guid: Expressions.Expression;
+
         for (let i = 0; i < keys.length; i++) {
           let key = keys[i];
-          if (key === 'guid' || key === 'insertBefore') {
-            actions.push(op('Expr', values[i]));
+          if (key === 'guid') {
+            guid = values[i];
+          } else if (key === 'insertBefore') {
+            insertBefore = values[i];
           } else {
             throw new Error(`SYNTAX ERROR: #in-element does not take a \`${keys[0]}\` option`);
           }
         }
 
+        // this order is important
+        actions.push(op('Expr', guid!));
+        actions.push(op('Expr', insertBefore!));
         actions.push(op('Expr', params[0]), op(Op.Dup, $sp, 0));
 
         return { count: 4, actions };

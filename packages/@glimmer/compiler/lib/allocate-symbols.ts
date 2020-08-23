@@ -2,61 +2,172 @@ import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import { expect, NonemptyStack } from '@glimmer/util';
 import {
-  AllocateSymbolsOps,
+  JavaScriptCompilerOp,
   JavaScriptCompilerOps,
-  Op,
+  NewAllocateSymbolsOps,
   Opcode,
   Ops,
   PathHead,
-  Processor,
   SourceLocation,
 } from './compiler-ops';
+import { SymbolTable } from './template-visitor';
 
 export type InVariable = PathHead;
 export type OutVariable = number;
 
 export type Out = Ops<JavaScriptCompilerOps>;
 
-export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
-  private _symbolStack: NonemptyStack<AST.Symbols> | null = null;
+export type SymbolStack = NonemptyStack<AST.Symbols>;
+
+type CompilerVisitor = {
+  [P in keyof NewAllocateSymbolsOps]?: (
+    symbols: SymbolStack,
+    ...args: NewAllocateSymbolsOps[P]
+  ) => JavaScriptCompilerOp | void;
+};
+
+const SymbolVisitor: CompilerVisitor = {
+  startProgram(symbols: SymbolStack, template: AST.Template) {
+    symbols.push(expect(template.symbols, 'Expected template to have symbols'));
+  },
+
+  startBlock(symbols: SymbolStack, op: AST.Block) {
+    symbols.push(expect(op.symbols, 'Expected block to have a symbol table'));
+  },
+
+  endBlock(symbols: SymbolStack) {
+    symbols.pop();
+  },
+
+  openNamedBlock(symbols: SymbolStack, op: AST.ElementNode) {
+    symbols.push(expect(op.symbols, 'Expected named block to have a symbol table'));
+  },
+
+  closeNamedBlock(symbols: SymbolStack, _op: AST.ElementNode) {
+    symbols.pop();
+  },
+
+  flushElement(symbols: SymbolStack, op: AST.ElementNode) {
+    if (op.symbols) {
+      symbols.push(op.symbols);
+    }
+  },
+
+  closeElement(symbols: SymbolStack, _op: AST.ElementNode) {
+    symbols.pop();
+  },
+
+  closeComponent(symbols: SymbolStack, _op: AST.ElementNode) {
+    symbols.pop();
+  },
+
+  closeDynamicComponent(symbols: SymbolStack, _op: AST.ElementNode) {
+    symbols.pop();
+  },
+
+  attrSplat(symbols: SymbolStack): ['attrSplat', number | null] {
+    return ['attrSplat', symbols.current.allocateBlock('attrs')];
+  },
+
+  getFree(symbols: SymbolStack, name: string): JavaScriptCompilerOp<'getFree'> {
+    let symbol = symbols.current.allocateFree(name);
+    return ['getFree', symbol];
+  },
+
+  getArg(symbols: SymbolStack, name: string): JavaScriptCompilerOp<'getSymbol'> {
+    let symbol = symbols.current.allocateNamed(name);
+    return ['getSymbol', symbol];
+  },
+
+  getThis(): JavaScriptCompilerOp<'getSymbol'> {
+    return ['getSymbol', 0];
+  },
+
+  getVar(
+    symbols: SymbolStack,
+    name: string,
+    context: ExpressionContext
+  ): JavaScriptCompilerOp<'getSymbol' | 'getFree' | 'getFreeWithContext'> {
+    if (symbols.current.has(name)) {
+      let symbol = symbols.current.get(name);
+      return ['getSymbol', symbol];
+    } else {
+      let symbol = symbols.current.allocateFree(name);
+      return ['getFreeWithContext', symbol, context];
+    }
+  },
+
+  yield(symbols: SymbolStack, op: string): JavaScriptCompilerOp<'yield'> {
+    return ['yield', symbols.current.allocateBlock(op)];
+  },
+
+  debugger(symbols: SymbolStack, _op: Option<InVariable[]>): JavaScriptCompilerOp<'debugger'> {
+    return ['debugger', symbols.current.getEvalInfo()];
+  },
+
+  hasBlock(symbols: SymbolStack, op: InVariable): JavaScriptCompilerOp<'hasBlock'> {
+    if (op === 0) {
+      throw new Error('Cannot hasBlock this');
+    }
+
+    return ['hasBlock', symbols.current.allocateBlock(op)];
+  },
+
+  hasBlockParams(symbols: SymbolStack, op: InVariable): JavaScriptCompilerOp<'hasBlockParams'> {
+    if (op === 0) {
+      throw new Error('Cannot hasBlockParams this');
+    }
+
+    return ['hasBlockParams', symbols.current.allocateBlock(op)];
+  },
+
+  partial(symbols: SymbolStack): JavaScriptCompilerOp<'partial'> {
+    return ['partial', symbols.current.getEvalInfo()];
+  },
+};
+
+export class SymbolAllocator {
+  private _symbolStack: NonemptyStack<AST.Symbols> = new NonemptyStack([SymbolTable.top()]);
 
   constructor(
-    private ops: readonly Ops<AllocateSymbolsOps>[],
-    private locations: readonly Option<SourceLocation>[]
+    private ops: readonly Opcode[],
+    private locations: readonly Option<SourceLocation>[] | null
   ) {}
 
   process(): {
-    ops: readonly Ops<JavaScriptCompilerOps>[];
+    ops: readonly JavaScriptCompilerOp[];
     readonly locations: Option<SourceLocation>[];
   } {
-    let out = [];
-    let locations = [];
+    let out: JavaScriptCompilerOp[] = [];
+    let locations: Option<SourceLocation>[] = [];
     let { ops } = this;
 
-    for (let i = 0; i < ops.length; i++) {
-      let op = ops[i];
-      let location = this.locations ? this.locations[i] : null;
-      let result = this.dispatch(op);
-
-      out.push(result);
-      locations.push(location);
+    for (let op of ops) {
+      out.push(this.dispatch(op));
     }
+
+    // for (let i = 0; i < ops.length; i++) {
+    //   let op = ops[i];
+    //   let location = this.locations ? this.locations[i] : null;
+    //   let result = this.dispatch(op);
+
+    //   out.push(result);
+    //   locations.push(location);
+    // }
 
     return { ops: out, locations };
   }
 
-  dispatch<O extends Ops<AllocateSymbolsOps>>(op: O): Ops<JavaScriptCompilerOps> {
-    if (Array.isArray(op)) {
-      let name = op[0];
-      let operand = op[1];
+  dispatch<O extends Opcode>(op: O): JavaScriptCompilerOp {
+    let [name, operand] = op.opcode;
 
-      return (this[name] as any)(operand) || ((op as unknown) as Ops<JavaScriptCompilerOps>);
+    if (name in SymbolVisitor) {
+      let visit = SymbolVisitor[name];
+
+      let result = (visit as any)(this.symbolStack, ...(operand as any));
+      return result || [name as any, ...(operand as any)];
     } else {
-      let opcode = (op as Opcode).opcode;
-      let [name, operand] = opcode;
-      console.log(opcode);
-
-      return this[name](...operand) || opcode;
+      return [name as JavaScriptCompilerOp[0], ...(operand as any)] as JavaScriptCompilerOp;
     }
   }
 
@@ -66,192 +177,5 @@ export class SymbolAllocator implements Processor<AllocateSymbolsOps> {
 
   get symbolStack(): NonemptyStack<AST.Symbols> {
     return expect(this._symbolStack, 'Expected a symbol table on the stack');
-  }
-
-  startProgram(op: AST.Template) {
-    this._symbolStack = new NonemptyStack([
-      expect(op.symbols, 'Expected program to have a symbol table'),
-    ]);
-  }
-
-  endProgram() {
-    // this.symbolStack.pop();
-  }
-
-  startBlock(op: AST.Block) {
-    this.symbolStack.push(expect(op.symbols, 'Expected block to have a symbol table'));
-  }
-
-  endBlock() {
-    this.symbolStack.pop();
-  }
-
-  openNamedBlock(op: AST.ElementNode) {
-    this.symbolStack.push(expect(op.symbols, 'Expected named block to have a symbol table'));
-  }
-
-  closeNamedBlock(_op: AST.ElementNode) {
-    this.symbolStack.pop();
-  }
-
-  flushElement(op: AST.ElementNode) {
-    if (op.symbols) {
-      this.symbolStack.push(op.symbols);
-    }
-  }
-
-  closeElement(_op: AST.ElementNode) {
-    this.symbolStack.pop();
-  }
-
-  closeComponent(_op: AST.ElementNode) {
-    this.symbolStack.pop();
-  }
-
-  closeDynamicComponent(_op: AST.ElementNode) {
-    this.symbolStack.pop();
-  }
-
-  attrSplat(): Op<JavaScriptCompilerOps, 'attrSplat'> {
-    return ['attrSplat', this.symbols.allocateBlock('attrs')];
-  }
-
-  getFree(name: string): Op<JavaScriptCompilerOps, 'getFree'> {
-    let symbol = this.symbols.allocateFree(name);
-    return ['getFree', symbol];
-  }
-
-  getArg(name: string): Op<JavaScriptCompilerOps, 'getSymbol'> {
-    let symbol = this.symbols.allocateNamed(name);
-    return ['getSymbol', symbol];
-  }
-
-  getThis(): Op<JavaScriptCompilerOps, 'getSymbol'> {
-    return ['getSymbol', 0];
-  }
-
-  getVar(
-    name: string,
-    context: ExpressionContext
-  ): Op<JavaScriptCompilerOps, 'getSymbol' | 'getFree' | 'getFreeWithContext'> {
-    if (this.symbols.has(name)) {
-      let symbol = this.symbols.get(name);
-      return ['getSymbol', symbol];
-    } else {
-      let symbol = this.symbols.allocateFree(name);
-      return ['getFreeWithContext', [symbol, context]];
-    }
-  }
-
-  getPath(rest: string[]): Op<JavaScriptCompilerOps, 'getPath'> {
-    return ['getPath', rest];
-  }
-
-  yield(op: string): Op<JavaScriptCompilerOps, 'yield'> {
-    return ['yield', this.symbols.allocateBlock(op)];
-  }
-
-  debugger(_op: Option<InVariable[]>): Op<JavaScriptCompilerOps, 'debugger'> {
-    return ['debugger', [this.symbols.getEvalInfo()]];
-  }
-
-  hasBlock(op: InVariable): Op<JavaScriptCompilerOps, 'hasBlock'> {
-    if (op === 0) {
-      throw new Error('Cannot hasBlock this');
-    }
-
-    return ['hasBlock', this.symbols.allocateBlock(op)];
-  }
-
-  hasBlockParams(op: InVariable): Op<JavaScriptCompilerOps, 'hasBlockParams'> {
-    if (op === 0) {
-      throw new Error('Cannot hasBlockParams this');
-    }
-
-    return ['hasBlockParams', this.symbols.allocateBlock(op)];
-  }
-
-  partial(): Op<JavaScriptCompilerOps, 'partial'> {
-    return ['partial', [this.symbols.getEvalInfo()]];
-  }
-
-  block(hasInverse: boolean): Op<JavaScriptCompilerOps, 'block'> {
-    return ['block', hasInverse];
-  }
-
-  modifier(): Out {
-    return ['modifier'];
-  }
-
-  helper(): Op<JavaScriptCompilerOps, 'helper'> {
-    return ['helper'];
-  }
-
-  text(content: string): Out {
-    return ['text', content];
-  }
-
-  comment(comment: string): Out {
-    return ['comment', comment];
-  }
-
-  openComponent(element: AST.ElementNode): Out {
-    return ['openComponent', element];
-  }
-
-  openElement(element: AST.ElementNode, simple: boolean): Out {
-    return ['openElement', [element, simple]];
-  }
-
-  staticArg(name: string) {
-    return ['staticArg', name];
-  }
-
-  dynamicArg(name: string) {
-    return ['dynamicArg', name];
-  }
-
-  staticAttr(name: string, ns: Option<string>) {
-    return ['staticAttr', [name, ns]];
-  }
-
-  staticComponentAttr(name: string, ns: Option<string>) {
-    return ['staticComponentAttr', [name, ns]];
-  }
-
-  trustingAttr(name: string, ns: Option<string>) {
-    return ['trustingAttr', [name, ns]];
-  }
-
-  dynamicAttr(name: string, ns: Option<string>) {
-    return ['dynamicAttr', [name, ns]];
-  }
-
-  componentAttr(name: string, ns: Option<string>) {
-    return ['componentAttr', [name, ns]];
-  }
-
-  trustingComponentAttr(name: string, ns: Option<string>) {
-    return ['trustingComponentAttr', [name, ns]];
-  }
-
-  append(trusted: boolean) {
-    return ['append', trusted];
-  }
-
-  literal(value: string | boolean | number | null | undefined): Op<AllocateSymbolsOps, 'literal'> {
-    return ['literal', value];
-  }
-
-  prepareArray(count: number) {
-    return ['prepareArray', count];
-  }
-
-  prepareObject(count: number) {
-    return ['prepareObject', count];
-  }
-
-  concat() {
-    return ['concat'];
   }
 }

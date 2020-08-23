@@ -208,17 +208,17 @@ export type AllocateSymbolsOp<
 > = NewAllocateSymbolsOps[K] extends unknown[] ? [K, ...NewAllocateSymbolsOps[K]] : never;
 
 export interface JavaScriptCompilerOps {
-  text: string;
-  comment: string;
+  text: [string];
+  comment: [string];
 
   openElement: [AST.ElementNode, boolean];
-  closeElement: AST.ElementNode;
-  openComponent: AST.ElementNode;
-  closeComponent: AST.ElementNode;
-  openNamedBlock: AST.ElementNode;
-  closeNamedBlock: AST.ElementNode;
-  closeDynamicComponent: AST.ElementNode;
-  flushElement: AST.ElementNode;
+  closeElement: [AST.ElementNode];
+  openComponent: [AST.ElementNode];
+  closeComponent: [AST.ElementNode];
+  openNamedBlock: [AST.ElementNode];
+  closeNamedBlock: [AST.ElementNode];
+  closeDynamicComponent: [AST.ElementNode];
+  flushElement: [AST.ElementNode];
 
   staticAttr: [string, string?];
   staticComponentAttr: [string, string?];
@@ -227,22 +227,63 @@ export interface JavaScriptCompilerOps {
   trustingComponentAttr: [string, string?];
   trustingAttr: [string, string?];
 
-  helper: void;
-  modifier: void;
-  block: boolean /* has inverse */;
-  attrSplat: Option<number>;
-  getPath: string[];
-  getSymbol: number;
-  getFree: number;
+  helper: [];
+  modifier: [];
+  block: [boolean] /* has inverse */;
+  attrSplat: [Option<number>];
+  getPath: [string[]];
+  getSymbol: [number];
+  getFree: [number];
   getFreeWithContext: [number, ExpressionContext];
-  yield: number;
+  yield: [number];
 
-  hasBlock: number;
-  hasBlockParams: number;
+  hasBlock: [number];
+  hasBlockParams: [number];
 
-  debugger: WireFormat.Core.EvalInfo;
-  partial: WireFormat.Core.EvalInfo;
+  debugger: [WireFormat.Core.EvalInfo];
+  partial: [WireFormat.Core.EvalInfo];
 }
+
+export type JavaScriptCompilerOp<
+  K extends keyof JavaScriptCompilerOps = keyof JavaScriptCompilerOps
+> = [K, ...JavaScriptCompilerOps[K]];
+
+// export interface JavaScriptCompilerOps {
+//   text: string;
+//   comment: string;
+
+//   openElement: [AST.ElementNode, boolean];
+//   closeElement: AST.ElementNode;
+//   openComponent: AST.ElementNode;
+//   closeComponent: AST.ElementNode;
+//   openNamedBlock: AST.ElementNode;
+//   closeNamedBlock: AST.ElementNode;
+//   closeDynamicComponent: AST.ElementNode;
+//   flushElement: AST.ElementNode;
+
+//   staticAttr: [string, string?];
+//   staticComponentAttr: [string, string?];
+//   componentAttr: [string, string?];
+//   dynamicAttr: [string, string?];
+//   trustingComponentAttr: [string, string?];
+//   trustingAttr: [string, string?];
+
+//   helper: void;
+//   modifier: void;
+//   block: boolean /* has inverse */;
+//   attrSplat: Option<number>;
+//   getPath: string[];
+//   getSymbol: number;
+//   getFree: number;
+//   getFreeWithContext: [number, ExpressionContext];
+//   yield: number;
+
+//   hasBlock: number;
+//   hasBlockParams: number;
+
+//   debugger: WireFormat.Core.EvalInfo;
+//   partial: WireFormat.Core.EvalInfo;
+// }
 
 export type Processor<InOps extends PipelineOps> = {
   [P in keyof InOps]: InOps[P] extends void ? () => void : (op: InOps[P]) => void;
