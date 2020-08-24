@@ -9,8 +9,7 @@ import {
   HirStatementOps,
   NewAllocateSymbolsOps,
   Opcode,
-  SourceLocation,
-} from './compiler-ops';
+} from '../lib/compiler-ops';
 import {
   assertIsSimpleHelper,
   DEBUGGER,
@@ -26,9 +25,9 @@ import {
   PARTIAL,
   YIELD,
 } from './is-node';
-import { locationToOffset } from './location';
-import { ProgramSymbolTable, SymbolTable } from './template-visitor';
-import { getAttrNamespace } from './utils';
+import { locationToOffset } from '../lib/location';
+import { ProgramSymbolTable, SymbolTable } from '../lib/template-visitor';
+import { getAttrNamespace } from '../lib/utils';
 
 type HirStatements = {
   [P in keyof HirStatementOps]: (node: AST.Nodes[P], source: string) => HirStatementOp<P>;

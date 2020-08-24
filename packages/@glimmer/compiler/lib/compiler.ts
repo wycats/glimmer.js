@@ -7,10 +7,10 @@ import {
   SerializedTemplate,
 } from '@glimmer/interfaces';
 import { PreprocessOptions } from '@glimmer/syntax';
-import { visit2 } from './direct-visitor';
 import { SymbolAllocator } from './allocate-symbols';
 import JavaScriptCompiler from './javascript-compiler';
 import { LOCAL_SHOULD_LOG } from '@glimmer/local-debug-flags';
+import { visit } from './pass1/index';
 
 export interface TemplateIdFn {
   (src: string): Option<string>;
@@ -109,7 +109,7 @@ export function precompileJSON(
 ): SerializedTemplate<unknown> {
   let ast = preprocess(string, options);
   let { meta } = options;
-  let opcodes = visit2(ast, string);
+  let opcodes = visit(string, ast);
   let { ops } = new SymbolAllocator(opcodes, null).process();
 
   let template = JavaScriptCompiler.process(ops, [], ast.symbols!, options);
@@ -145,7 +145,7 @@ export function precompile(
 ): TemplateJavascript {
   let ast = preprocess(string, options);
   let { meta } = options;
-  let opcodes = visit2(ast, string);
+  let opcodes = visit(string, ast);
   let { ops } = new SymbolAllocator(opcodes, null).process();
 
   let template = JavaScriptCompiler.process(ops, [], ast.symbols!, options);

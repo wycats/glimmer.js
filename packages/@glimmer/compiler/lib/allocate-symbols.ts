@@ -1,14 +1,14 @@
 import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import { expect, NonemptyStack } from '@glimmer/util';
+import { Opcode } from '../pass1/context';
+import { SourceOffsets } from '../pass1/location';
 import {
   JavaScriptCompilerOp,
   JavaScriptCompilerOps,
   NewAllocateSymbolsOps,
-  Opcode,
   Ops,
   PathHead,
-  SourceLocation,
 } from './compiler-ops';
 import { SymbolTable } from './template-visitor';
 
@@ -131,15 +131,15 @@ export class SymbolAllocator {
 
   constructor(
     private ops: readonly Opcode[],
-    private locations: readonly Option<SourceLocation>[] | null
+    private locations: readonly Option<SourceOffsets>[] | null
   ) {}
 
   process(): {
     ops: readonly JavaScriptCompilerOp[];
-    readonly locations: Option<SourceLocation>[];
+    readonly locations: Option<SourceOffsets>[];
   } {
     let out: JavaScriptCompilerOp[] = [];
-    let locations: Option<SourceLocation>[] = [];
+    let locations: Option<SourceOffsets>[] = [];
     let { ops } = this;
 
     for (let op of ops) {
@@ -159,15 +159,15 @@ export class SymbolAllocator {
   }
 
   dispatch<O extends Opcode>(op: O): JavaScriptCompilerOp {
-    let [name, operand] = op.opcode;
+    let { name, args } = op;
 
     if (name in SymbolVisitor) {
       let visit = SymbolVisitor[name];
 
-      let result = (visit as any)(this.symbolStack, ...(operand as any));
-      return result || [name as any, ...(operand as any)];
+      let result = (visit as any)(this.symbolStack, ...(args as any));
+      return result || [name as any, ...(args as any)];
     } else {
-      return [name as JavaScriptCompilerOp[0], ...(operand as any)] as JavaScriptCompilerOp;
+      return [name as JavaScriptCompilerOp[0], ...(args as any)] as JavaScriptCompilerOp;
     }
   }
 

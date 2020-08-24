@@ -1,7 +1,6 @@
-import { AST, SyntaxError, builders } from '@glimmer/syntax';
-import { ExpressionContext } from '../../interfaces';
-import { Opcode } from './compiler-ops';
-import { CompilerContext } from './direct-visitor';
+import { ExpressionContext } from '@glimmer/interfaces';
+import { AST, builders, SyntaxError } from '@glimmer/syntax';
+import { CompilerContext, Opcode } from './context';
 
 export type Keyword = 'has-block' | 'has-block-params';
 
@@ -183,17 +182,17 @@ export const IN_ELEMENT = new KeywordBlock('in-element', {
       pairs.push(builders.pair('insertBefore', builders.undefined()));
     }
 
-    return [
-      ...ctx.helper.args({
+    return ctx.ops(
+      ctx.helper.args({
         path: block.path,
         params: block.params,
         hash: builders.hash(pairs, block.hash.loc),
       }),
-      ...ctx.expr(block.path, ExpressionContext.BlockHead),
-      ...ctx.stmt(block.inverse || null),
-      ...ctx.stmt(block.program),
-      ctx.opcode(block, 'block', !!block.inverse),
-    ];
+      ctx.expr(block.path, ExpressionContext.BlockHead),
+      ctx.stmt(block.inverse || null),
+      ctx.stmt(block.program),
+      ctx.op('block', !!block.inverse).loc(block)
+    );
   },
 });
 
@@ -221,7 +220,7 @@ export const YIELD = new KeywordStatement('yield', {
   },
 
   opcode(statement: KeywordStatementNode<'yield'>, ctx: CompilerContext, param: string): Opcode[] {
-    return [...ctx.helper.params(statement), ctx.opcode(statement, 'yield', param)];
+    return [...ctx.helper.params(statement), ctx.op('yield', param).loc(statement)];
   },
 });
 
@@ -257,7 +256,7 @@ export const PARTIAL = new KeywordStatement('partial', {
   },
 
   opcode(statement: KeywordStatementNode<'partial'>, ctx: CompilerContext): Opcode[] {
-    return [...ctx.helper.params(statement), ctx.opcode(statement, 'partial')];
+    return [...ctx.helper.params(statement), ctx.op('partial').loc(statement)];
   },
 });
 
@@ -278,7 +277,7 @@ export const DEBUGGER = new KeywordStatement('debugger', {
   },
 
   opcode(statement: KeywordStatementNode<'debugger'>, ctx: CompilerContext): Opcode[] {
-    return [ctx.opcode(statement, 'debugger', null)];
+    return [ctx.op('debugger', null).loc(statement)];
   },
 });
 
@@ -287,7 +286,7 @@ export const HAS_BLOCK = new KeywordExpression('has-block', {
     return assertValidHasBlockUsage('has-block', node);
   },
   opcode(node: KeywordExpressionNode<'has-block'>, ctx: CompilerContext, param: string): Opcode[] {
-    return [ctx.opcode(node, 'hasBlock', param)];
+    return [ctx.op('hasBlock', param).loc(node)];
   },
 });
 
@@ -300,7 +299,7 @@ export const HAS_BLOCK_PARAMS = new KeywordExpression('has-block-params', {
     ctx: CompilerContext,
     target: string
   ): Opcode[] {
-    return [ctx.opcode(node, 'hasBlockParams', target)];
+    return [ctx.op('hasBlockParams', target).loc(node)];
   },
 });
 

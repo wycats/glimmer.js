@@ -7,12 +7,6 @@ import { Option, WireFormat, ExpressionContext } from '@glimmer/interfaces';
  */
 export type PathHead = string | 0;
 
-export interface SourceLocation {
-  source: string | null;
-  start: number;
-  end: number;
-}
-
 export interface InputOps {
   startProgram: [AST.Template];
   endProgram: [AST.Template];
