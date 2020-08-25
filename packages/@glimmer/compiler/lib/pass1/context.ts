@@ -1,17 +1,10 @@
 import { ExpressionContext } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import { NonemptyStack } from '@glimmer/util';
-import { Op, OpFactory, Ops, UnlocatedOp } from '../ops/ops';
+import { Op, OpFactory, Ops, UnlocatedOp } from '../shared/ops';
 import { Pass2Op, Pass2OpTable } from '../pass2/ops';
 import { SymbolTable } from '../template-visitor';
 import { CompilerHelper } from './index';
-
-/**
- * In reality, AttrNode does not appear as a statement in top-level content, but rather
- * only nested inside of a specific part of the ElementNode, so we can handle it (in
- * context) there and not have to worry about generically seeing one of them in content.
- */
-type TopLevelStatement = AST.Statement | AST.Block;
 
 /**
  * This is the mutable state for this compiler pass.
@@ -28,16 +21,12 @@ export class CompilerState {
 type NodeFor<N extends AST.BaseNode, K extends N['type']> = N extends { type: K } ? N : never;
 
 type Visitors<N extends AST.BaseNode> = {
-  [P in N['type']]: (node: NodeFor<N, P>, ctx: CompilerContext) => Pass2Op[] | Pass2Op;
+  [P in N['type']]: (node: NodeFor<N, P>, ctx: Context) => Pass2Op[] | Pass2Op;
 };
 
-type VisitorFunc<N extends AST.BaseNode> = (node: N, ctx: CompilerContext) => Pass2Op[] | Pass2Op;
+type VisitorFunc<N extends AST.BaseNode> = (node: N, ctx: Context) => Pass2Op[] | Pass2Op;
 
-function visit<N extends AST.BaseNode>(
-  visitors: Visitors<N>,
-  node: N,
-  ctx: CompilerContext
-): Pass2Op[] {
+function visit<N extends AST.BaseNode>(visitors: Visitors<N>, node: N, ctx: Context): Pass2Op[] {
   let f = visitors[node.type as N['type']] as VisitorFunc<N>;
   let result = f(node, ctx);
 
@@ -50,7 +39,7 @@ function visit<N extends AST.BaseNode>(
 
 export interface Pass1Visitor {
   expressions: Visitors<AST.Expression | AST.ConcatStatement>;
-  statements: Visitors<TopLevelStatement>;
+  statements: Visitors<AST.TopLevelStatement>;
 }
 
 type OpName = keyof Pass2OpTable;
@@ -63,8 +52,8 @@ type OpMap = Pass2OpTable;
  * `CompilerHelper`, on the other hand, does not need to share an identity since it
  * has no mutable state at all.
  */
-export class CompilerContext {
-  readonly statements: Visitors<TopLevelStatement>;
+export class Context {
+  readonly statements: Visitors<AST.TopLevelStatement>;
   readonly expressions: Visitors<AST.Expression | AST.ConcatStatement>;
   readonly state = new CompilerState();
   readonly helper: CompilerHelper;
@@ -122,7 +111,7 @@ export class CompilerContext {
     }
   }
 
-  stmt<T extends TopLevelStatement>(node: T | null): Pass2Op[] {
+  stmt<T extends AST.TopLevelStatement>(node: T | null): Pass2Op[] {
     if (node === null) {
       return [];
     } else {

@@ -1,6 +1,6 @@
 import type { AST } from '@glimmer/syntax';
 import type { ExpressionContext, Option, WireFormat } from '@glimmer/interfaces';
-import { Op, OpImpl } from '../ops/ops';
+import { Op, OpImpl } from '../shared/ops';
 
 export interface Pass3OpsTable {
   startProgram: AST.Template;

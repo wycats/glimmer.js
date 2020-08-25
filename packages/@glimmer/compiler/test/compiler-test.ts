@@ -1,26 +1,23 @@
 /* eslint-disable qunit/no-test-expect-argument */
 
 import {
-  precompile,
-  WireFormatDebugger,
-  BuilderStatement,
-  ProgramSymbols,
-  buildStatements,
-  Builder,
-  s,
-  c,
-  NEWLINE,
-  unicode,
-  TemplateCompiler,
-  TemplateVisitor,
-} from '..';
-import {
-  SerializedTemplateWithLazyBlock,
   SerializedTemplate,
   SerializedTemplateBlock,
+  SerializedTemplateWithLazyBlock,
 } from '@glimmer/interfaces';
 import { assign, strip } from '@glimmer/util';
-import { preprocess } from '@glimmer/syntax';
+import {
+  Builder,
+  BuilderStatement,
+  buildStatements,
+  c,
+  NEWLINE,
+  precompile,
+  ProgramSymbols,
+  s,
+  unicode,
+  WireFormatDebugger,
+} from '..';
 
 QUnit.module('@glimmer/compiler - compiling source to wire format');
 

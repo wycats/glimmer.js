@@ -1,7 +1,7 @@
 import { AST, SyntaxError } from '@glimmer/syntax';
 import { expect, NonemptyStack } from '@glimmer/util';
 import { offsetsToLocation } from '../location';
-import { OpFactory, Ops } from '../ops/ops';
+import { OpFactory, Ops } from '../shared/ops';
 import { SourceOffsets } from '../pass1/location';
 import { Pass3Op, Pass3OpsTable } from '../pass3/ops';
 import { SymbolTable } from '../template-visitor';

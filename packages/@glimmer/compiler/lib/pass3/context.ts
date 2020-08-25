@@ -1,7 +1,7 @@
 import { Option, WireFormat as WF, WireFormat } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import { assert, expect, Stack } from '@glimmer/util';
-import { Op, OpFactory, OpImpl, Ops } from '../ops/ops';
+import { Op, OpFactory, OpImpl, Ops } from '../shared/ops';
 import { SourceOffsets } from '../pass1/location';
 import { Block, ComponentBlock, InlineBlock, Template } from './blocks';
 import { Check } from './checks';

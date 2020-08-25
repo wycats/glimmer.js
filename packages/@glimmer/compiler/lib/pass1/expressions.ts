@@ -1,38 +1,38 @@
 import { ExpressionContext } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import { Pass2Op } from '../pass2/ops';
-import { CompilerContext, Pass1Visitor } from './context';
+import { Context, Pass1Visitor } from './context';
 
 export const HirExpressions: Pass1Visitor['expressions'] = {
-  PathExpression(path: AST.PathExpression, ctx: CompilerContext): Pass2Op[] {
+  PathExpression(path: AST.PathExpression, ctx: Context): Pass2Op[] {
     return ctx.helper.pathWithContext(path, ExpressionContext.Expression);
   },
 
-  StringLiteral(literal: AST.StringLiteral, ctx: CompilerContext): Pass2Op {
+  StringLiteral(literal: AST.StringLiteral, ctx: Context): Pass2Op {
     return ctx.op('literal', literal.value).loc(literal);
   },
 
-  BooleanLiteral(literal: AST.BooleanLiteral, ctx: CompilerContext): Pass2Op {
+  BooleanLiteral(literal: AST.BooleanLiteral, ctx: Context): Pass2Op {
     return ctx.op('literal', literal.value).loc(literal);
   },
 
-  NumberLiteral(literal: AST.NumberLiteral, ctx: CompilerContext): Pass2Op {
+  NumberLiteral(literal: AST.NumberLiteral, ctx: Context): Pass2Op {
     return ctx.op('literal', literal.value).loc(literal);
   },
 
-  NullLiteral(literal: AST.NullLiteral, ctx: CompilerContext): Pass2Op {
+  NullLiteral(literal: AST.NullLiteral, ctx: Context): Pass2Op {
     return ctx.op('literal', literal.value).loc(literal);
   },
 
-  UndefinedLiteral(literal: AST.UndefinedLiteral, ctx: CompilerContext): Pass2Op {
+  UndefinedLiteral(literal: AST.UndefinedLiteral, ctx: Context): Pass2Op {
     return ctx.op('literal', literal.value).loc(literal);
   },
 
-  ConcatStatement(concat: AST.ConcatStatement, ctx: CompilerContext): Pass2Op[] {
+  ConcatStatement(concat: AST.ConcatStatement, ctx: Context): Pass2Op[] {
     return ctx.helper.concat(concat);
   },
 
-  SubExpression(expr: AST.SubExpression, ctx: CompilerContext): Pass2Op[] {
+  SubExpression(expr: AST.SubExpression, ctx: Context): Pass2Op[] {
     return ctx.helper.sexp(expr);
   },
 };

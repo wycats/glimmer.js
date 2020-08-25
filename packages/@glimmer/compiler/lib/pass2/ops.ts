@@ -1,6 +1,6 @@
 import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
-import { Op } from '../ops/ops';
+import { Op } from '../shared/ops';
 
 export interface Pass2OpTable {
   startProgram: AST.Template;

@@ -4,7 +4,7 @@ import { assertNever } from '@glimmer/util';
 import { Pass2Op } from '../pass2/ops';
 import { ProgramSymbolTable } from '../template-visitor';
 import { getAttrNamespace } from '../utils';
-import { CompilerContext } from './context';
+import { Context } from './context';
 import { HirExpressions } from './expressions';
 import {
   assertIsSimpleHelper,
@@ -26,7 +26,7 @@ import { HirStatements } from './statements';
 type TopLevelStatement = AST.Statement | AST.Block;
 
 export function visit(source: string, root: AST.Template): Pass2Op[] {
-  let ctx = new CompilerContext(source, {
+  let ctx = new Context(source, {
     expressions: HirExpressions,
     statements: HirStatements,
   });
@@ -49,9 +49,9 @@ export function visit(source: string, root: AST.Template): Pass2Op[] {
  * function here. (and in fact, that's how keywords work)
  */
 export class CompilerHelper {
-  readonly ctx: CompilerContext;
+  readonly ctx: Context;
 
-  constructor(context: CompilerContext) {
+  constructor(context: Context) {
     this.ctx = context;
   }
 

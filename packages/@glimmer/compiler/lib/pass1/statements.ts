@@ -2,7 +2,7 @@ import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST, isLiteral } from '@glimmer/syntax';
 import { Pass2Op } from '../pass2/ops';
 import { SymbolTable } from '../template-visitor';
-import { CompilerContext, Pass1Visitor } from './context';
+import { Context, Pass1Visitor } from './context';
 import {
   DEBUGGER,
   hasPath,
@@ -25,7 +25,7 @@ export const HirStatements: Pass1Visitor['statements'] = {
     throw new Error(`Handlebars partials are not supported in Glimmer`);
   },
 
-  Block(block: AST.Block, ctx: CompilerContext): Pass2Op[] {
+  Block(block: AST.Block, ctx: Context): Pass2Op[] {
     return ctx.ops(
       ctx.startBlock(block),
       ctx.op('startBlock', block).loc(block),
@@ -35,7 +35,7 @@ export const HirStatements: Pass1Visitor['statements'] = {
     );
   },
 
-  BlockStatement(block: AST.BlockStatement, ctx: CompilerContext): Pass2Op[] {
+  BlockStatement(block: AST.BlockStatement, ctx: Context): Pass2Op[] {
     if (IN_ELEMENT.match(block)) {
       return IN_ELEMENT.opcode(block, ctx);
     } else {
@@ -49,7 +49,7 @@ export const HirStatements: Pass1Visitor['statements'] = {
     }
   },
 
-  ElementNode(element: AST.ElementNode, ctx: CompilerContext): Pass2Op[] {
+  ElementNode(element: AST.ElementNode, ctx: Context): Pass2Op[] {
     let classify = classifyElement(element, ctx.symbols.current);
 
     // are `@args` are allowed?
@@ -122,7 +122,7 @@ export const HirStatements: Pass1Visitor['statements'] = {
     return [];
   },
 
-  MustacheStatement(mustache: AST.MustacheStatement, ctx: CompilerContext): Pass2Op[] {
+  MustacheStatement(mustache: AST.MustacheStatement, ctx: Context): Pass2Op[] {
     let { path } = mustache;
 
     if (isLiteral(path)) {
@@ -166,11 +166,11 @@ export const HirStatements: Pass1Visitor['statements'] = {
     );
   },
 
-  TextNode(text: AST.TextNode, ctx: CompilerContext): Pass2Op {
+  TextNode(text: AST.TextNode, ctx: Context): Pass2Op {
     return ctx.op('text', text.chars).loc(text);
   },
 
-  CommentStatement(comment: AST.CommentStatement, ctx: CompilerContext): Pass2Op {
+  CommentStatement(comment: AST.CommentStatement, ctx: Context): Pass2Op {
     return ctx.op('comment', comment.value).loc(comment);
   },
 };

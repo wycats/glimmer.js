@@ -1,35 +1,37 @@
-import { ASTPluginBuilder, preprocess } from '@glimmer/syntax';
-import { precompile, TemplateCompiler } from '@glimmer/compiler';
-import { expect } from '@glimmer/util';
+import { precompileJSON } from '@glimmer/compiler';
 import {
-  ProgramSymbolTable,
-  ModuleLocator,
   CompilableProgram,
   CompilableTemplate,
-  SerializedHeap,
-  ConstantPool,
-  SerializedTemplateBlock,
   CompileMode,
-  WholeProgramCompilationContext,
-  STDLib,
-  CompileTimeHeap,
-  SyntaxCompilationContext,
   CompileTimeConstants,
-  Macros,
-  Option,
+  CompileTimeHeap,
+  ConstantPool,
   EncoderError,
   HandleResult,
+  Macros,
+  ModuleLocator,
+  Option,
+  ProgramSymbolTable,
+  SerializedHeap,
+  SerializedTemplateBlock,
+  STDLib,
+  SyntaxCompilationContext,
+  WholeProgramCompilationContext,
 } from '@glimmer/interfaces';
-import { compileStd, compilable, MacrosImpl } from '@glimmer/opcode-compiler';
-
-import ModuleLocatorMap from './module-locator-map';
-import DebugConstants from './debug-constants';
-import ExternalModuleTable from './external-module-table';
-import BundleCompilerDelegate from './delegate';
-import BundleCompilerLookup from './lookup';
+import {
+  compilable,
+  compileStd,
+  MacrosImpl,
+  syntaxCompilationContext,
+} from '@glimmer/opcode-compiler';
 import { HeapImpl } from '@glimmer/program';
-import { syntaxCompilationContext } from '@glimmer/opcode-compiler';
-import { precompileJSON } from '@glimmer/compiler';
+import { ASTPluginBuilder } from '@glimmer/syntax';
+import { expect } from '@glimmer/util';
+import DebugConstants from './debug-constants';
+import BundleCompilerDelegate from './delegate';
+import ExternalModuleTable from './external-module-table';
+import BundleCompilerLookup from './lookup';
+import ModuleLocatorMap from './module-locator-map';
 
 export interface BundleCompileOptions {
   plugins: ASTPluginBuilder[];

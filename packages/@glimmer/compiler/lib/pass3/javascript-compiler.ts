@@ -8,7 +8,7 @@ import {
 import { AST } from '@glimmer/syntax';
 import { assert, expect, Option } from '@glimmer/util';
 import { expressionContextOp } from '../builder';
-import { OpImpl } from '../ops/ops';
+import { OpImpl } from '../shared/ops';
 import { deflateAttrName } from '../utils';
 import { Block, ComponentBlock, InlineBlock, NamedBlock, Template } from './blocks';
 import { ANY, CONCAT_PARAMS, EXPR, GET, HASH, PARAMS, STRING } from './checks';
