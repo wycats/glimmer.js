@@ -126,18 +126,4 @@ export class CompilerContext {
       return visit(this.statements, node, this);
     }
   }
-
-  // opcode<K extends keyof NewAllocateSymbolsOps, O extends AllocateSymbolsOp<K>>(
-  //   node: NodeWithLocation | AST.BaseNode | [AST.BaseNode, ...AST.BaseNode[]],
-  //   key: K,
-  //   ...rest: Tail<O>
-  // ): Opcode<K> {
-  //   let opcode = ([key, rest] as unknown) as AllocateSymbolsOp<K>;
-
-  //   if ('type' in node || Array.isArray(node)) {
-  //     return { opcode, location: sourceLocation(node, this.source) };
-  //   } else {
-  //     return { opcode, location: node.loc };
-  //   }
-  // }
 }

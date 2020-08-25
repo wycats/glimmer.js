@@ -3,6 +3,12 @@ import type { ExpressionContext, Option, WireFormat } from '@glimmer/interfaces'
 import { Op } from '../ops/ops';
 
 export interface JavaScriptCompilerOps {
+  startProgram: [AST.Template];
+  endProgram: [];
+  startBlock: [AST.Block];
+  endBlock: [];
+  append: [boolean];
+
   text: [string];
   comment: [string];
 
@@ -15,6 +21,8 @@ export interface JavaScriptCompilerOps {
   closeDynamicComponent: [AST.ElementNode];
   flushElement: [AST.ElementNode];
 
+  staticArg: [string];
+  dynamicArg: [string];
   staticAttr: [string, string?];
   staticComponentAttr: [string, string?];
   componentAttr: [string, string?];
@@ -32,11 +40,17 @@ export interface JavaScriptCompilerOps {
   getFreeWithContext: [number, ExpressionContext];
   yield: [number];
 
+  literal: [string | boolean | number | null | undefined];
+  concat: [];
+
   hasBlock: [number];
   hasBlockParams: [number];
 
   debugger: [WireFormat.Core.EvalInfo];
   partial: [WireFormat.Core.EvalInfo];
+
+  prepareArray: [number];
+  prepareObject: [number];
 }
 
 export type JavaScriptCompilerOp<

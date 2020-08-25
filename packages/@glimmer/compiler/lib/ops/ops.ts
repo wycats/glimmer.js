@@ -2,11 +2,11 @@ import { SourceLocation, SourcePosition } from '@glimmer/syntax';
 import { positionToOffset } from '../location';
 import { SourceOffsets } from '../pass1/location';
 
-export type ArgsMap<K extends string> = {
+export type ArgsMap<K extends string | number> = {
   [P in K]: unknown[];
 };
 
-export type Ops<K extends string, Map extends ArgsMap<K>> = Op<K, Map> | Op<K, Map>[];
+export type Ops<K extends string | number, Map extends ArgsMap<K>> = Op<K, Map> | Op<K, Map>[];
 
 export type AllUnlocatedOps<K extends string, Map extends ArgsMap<K>> = K extends string
   ? UnlocatedOp<K, Map>
@@ -16,7 +16,7 @@ export type AllOps<K extends string, Map extends ArgsMap<K>> = K extends string
   ? Op<K, Map>
   : never;
 
-export class OpFactory<K extends string, Map extends ArgsMap<K>> {
+export class OpFactory<K extends string | number, Map extends ArgsMap<K>> {
   constructor(private source: string) {}
 
   op<N extends K>(name: N, ...args: Map[N]): UnlocatedOp<K, Map> {
@@ -62,7 +62,7 @@ function range(first: SourcePosition, last: SourcePosition, source: string): Sou
   }
 }
 
-export class UnlocatedOp<K extends string, Map extends ArgsMap<K>> {
+export class UnlocatedOp<K extends string | number, Map extends ArgsMap<K>> {
   constructor(readonly name: K, readonly args: Map[K], private source: string) {}
 
   loc(
@@ -109,6 +109,6 @@ export class UnlocatedOp<K extends string, Map extends ArgsMap<K>> {
   }
 }
 
-export class Op<K extends string, Map extends ArgsMap<K>> {
+export class Op<K extends string | number, Map extends ArgsMap<K>> {
   constructor(readonly name: K, readonly args: Map[K], readonly offsets: SourceOffsets | null) {}
 }

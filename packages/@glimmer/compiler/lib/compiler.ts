@@ -6,7 +6,7 @@ import {
   SerializedTemplate,
 } from '@glimmer/interfaces';
 import { PreprocessOptions } from '@glimmer/syntax';
-import JavaScriptCompiler from './javascript-compiler';
+import { process } from './pass3/javascript-compiler';
 import { LOCAL_SHOULD_LOG } from '@glimmer/local-debug-flags';
 import { visit } from './pass1/index';
 import { allocate } from './pass2/index';
@@ -65,7 +65,7 @@ const defaultOptions: PrecompileOptions = {
  * @return {string} a template javascript string
  */
 export function precompileJSON(
-  string: string,
+  source: string,
   options?: PrecompileOptions
 ): SerializedTemplate<unknown>;
 export function precompileJSON(
@@ -77,7 +77,7 @@ export function precompileJSON(
   let opcodes = visit(string, ast);
   let ops = allocate(opcodes, string);
 
-  let template = JavaScriptCompiler.process(ops, ast.symbols!, options);
+  let template = process(ops, ast.symbols!, string, options);
 
   if (LOCAL_SHOULD_LOG) {
     console.log(`Template ->`, template);
@@ -105,15 +105,15 @@ export function precompileJSON(
  */
 export function precompile(string: string, options?: PrecompileOptions): TemplateJavascript;
 export function precompile(
-  string: string,
+  source: string,
   options: PrecompileOptions = defaultOptions
 ): TemplateJavascript {
-  let ast = preprocess(string, options);
+  let ast = preprocess(source, options);
   let { meta } = options;
-  let opcodes = visit(string, ast);
-  let ops = allocate(opcodes, string);
+  let opcodes = visit(source, ast);
+  let ops = allocate(opcodes, source);
 
-  let template = JavaScriptCompiler.process(ops, ast.symbols!, options);
+  let template = process(ops, ast.symbols!, source, options);
 
   if (LOCAL_SHOULD_LOG) {
     console.log(`Template ->`, template);
