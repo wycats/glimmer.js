@@ -1,5 +1,4 @@
 import { AST } from '@glimmer/syntax';
-import { Op } from './ops';
 
 export interface AstExpressionOps {
   PathExpression: [path: AST.PathExpression];
@@ -23,24 +22,3 @@ export interface AstStatementOps {
   TextNode: [text: AST.TextNode];
   CommentStatement: [comment: AST.CommentStatement];
 }
-
-export type AstExpressionOp = {
-  [P in keyof AstExpressionOps]: Op<P, AstExpressionOps[P]>;
-};
-
-// export interface InputOps {
-//   startProgram: [template: AST.Template];
-//   endProgram: [template: AST.Template];
-//   startBlock: [block: AST.Block];
-//   endBlock: [block: AST.Block];
-//   block: [block: AST.BlockStatement];
-//   mustache: [curly: AST.MustacheStatement];
-//   openElement: [element: AST.ElementNode];
-//   closeElement: [element: AST.ElementNode];
-//   text: [text: AST.TextNode];
-//   comment: [comment: AST.CommentStatement];
-// }
-
-// export type InputOp = {
-//   [P in keyof InputOps]: Op<P, InputOps[P]>;
-// };

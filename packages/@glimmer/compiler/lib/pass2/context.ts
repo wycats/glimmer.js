@@ -1,15 +1,15 @@
 import { AST, SyntaxError } from '@glimmer/syntax';
 import { expect, NonemptyStack } from '@glimmer/util';
-import { JavaScriptCompilerOps } from '../compiler-ops';
 import { offsetsToLocation } from '../location';
-import { Op, OpFactory, Ops } from '../ops/ops';
+import { OpFactory, Ops } from '../ops/ops';
 import { SourceOffsets } from '../pass1/location';
+import { Pass3Op, Pass3OpsTable } from '../pass3/ops';
 import { SymbolTable } from '../template-visitor';
 
 export type SymbolStack = NonemptyStack<AST.Symbols>;
 
-type OpName = keyof JavaScriptCompilerOps;
-type OpMap = JavaScriptCompilerOps;
+type OpName = keyof Pass3OpsTable;
+type OpMap = Pass3OpsTable;
 
 export class UnlocatedCompilerContext {
   readonly symbols: SymbolStack = new NonemptyStack([SymbolTable.top()]);
@@ -64,15 +64,15 @@ export class CompilerContext {
     this.#symbols.pop();
   }
 
-  op<N extends OpName>(name: N, ...args: OpMap[N]): Op<OpName, OpMap> {
-    return this.#factory.op(name, ...args).offsets(this.#offsets);
+  op<N extends OpName>(name: N, args: OpMap[N]): Pass3Op {
+    return this.#factory.op(name, args).offsets(this.#offsets);
   }
 
-  ops(...ops: Ops<OpName, OpMap>[]): Op<OpName, OpMap>[] {
+  ops(...ops: Ops<OpName, OpMap>[]): Pass3Op[] {
     return this.#factory.ops(...ops);
   }
 
-  map<T>(input: T[], callback: (input: T) => Op<OpName, OpMap>[]): Op<OpName, OpMap>[] {
+  map<T>(input: T[], callback: (input: T) => Pass3Op[]): Pass3Op[] {
     return this.#factory.map(input, callback);
   }
 }

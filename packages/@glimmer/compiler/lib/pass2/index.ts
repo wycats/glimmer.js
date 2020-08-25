@@ -1,123 +1,118 @@
 import { ExpressionContext } from '@glimmer/interfaces';
+import { AST } from '../../../syntax';
 import { PathHead } from '../compiler-ops';
-import { Opcode } from '../pass1/context';
-import { JavaScriptCompilerOp } from '../pass3/ops';
+import { Pass3Op } from '../pass3/ops';
 import { CompilerContext, UnlocatedCompilerContext } from './context';
-import { AllocateSymbolsOpTable } from './ops';
+import { Pass2Op, Pass2Ops, Pass2OpTable } from './ops';
 
 export type InVariable = PathHead;
 export type OutVariable = number;
 
 type Visitor = {
-  [P in keyof AllocateSymbolsOpTable]?: (
-    ctx: CompilerContext,
-    ...args: AllocateSymbolsOpTable[P]
-  ) => JavaScriptCompilerOp | void;
+  [P in keyof Pass2OpTable]?: (ctx: CompilerContext, args: Pass2OpTable[P]) => Pass3Op | void;
 };
 
-type Op = JavaScriptCompilerOp;
-
-const SymbolVisitor: Visitor = {
-  startProgram(ctx, template) {
+class Pass2Visitor implements Visitor {
+  startProgram(ctx: CompilerContext, template: AST.Template): void {
     ctx.push(template.symbols);
-  },
+  }
 
-  startBlock(ctx, op) {
+  startBlock(ctx: CompilerContext, op: AST.Block): void {
     ctx.push(op.symbols);
-  },
+  }
 
-  endBlock(ctx) {
+  endBlock(ctx: CompilerContext): void {
     ctx.pop();
-  },
+  }
 
-  openNamedBlock(ctx, element) {
+  openNamedBlock(ctx: CompilerContext, element: AST.ElementNode): void {
     ctx.push(element.symbols);
-  },
+  }
 
-  closeNamedBlock(ctx) {
+  closeNamedBlock(ctx: CompilerContext): void {
     ctx.pop();
-  },
+  }
 
-  flushElement(ctx, element) {
+  flushElement(ctx: CompilerContext, element: AST.ElementNode): void {
     if (element.symbols) {
       ctx.push(element.symbols);
     }
-  },
+  }
 
-  closeElement(ctx) {
+  closeElement(ctx: CompilerContext): void {
     ctx.pop();
-  },
+  }
 
-  closeComponent(ctx) {
+  closeComponent(ctx: CompilerContext): void {
     ctx.pop();
-  },
+  }
 
-  closeDynamicComponent(ctx) {
+  closeDynamicComponent(ctx: CompilerContext): void {
     ctx.pop();
-  },
+  }
 
-  attrSplat(ctx): Op {
+  attrSplat(ctx: CompilerContext): Pass3Op {
     return ctx.op('attrSplat', ctx.table.allocateBlock('attrs'));
-  },
+  }
 
-  getFree(ctx: CompilerContext, name: string): Op {
-    let symbol = ctx.table.allocateFree(name);
-    return ctx.op('getFree', symbol);
-  },
-
-  getArg(ctx: CompilerContext, name: string): Op {
+  getArg(ctx: CompilerContext, name: string): Pass3Op {
     let symbol = ctx.table.allocateNamed(name);
     return ctx.op('getSymbol', symbol);
-  },
+  }
 
-  getThis(ctx): Op {
+  getThis(ctx: CompilerContext): Pass3Op {
     return ctx.op('getSymbol', 0);
-  },
+  }
 
-  getVar(ctx: CompilerContext, name: string, context: ExpressionContext): Op {
+  getVar(
+    ctx: CompilerContext,
+    { var: name, context }: { var: string; context: ExpressionContext }
+  ): Pass3Op {
     if (ctx.table.has(name)) {
       let symbol = ctx.table.get(name);
       return ctx.op('getSymbol', symbol);
     } else {
       // this will be different in strict mode
       let symbol = ctx.table.allocateFree(name);
-      return ctx.op('getFreeWithContext', symbol, context);
+      return ctx.op('getFreeWithContext', { var: symbol, context });
     }
-  },
+  }
 
-  yield(ctx, op): Op {
+  yield(ctx: CompilerContext, op: string): Pass3Op {
     return ctx.op('yield', ctx.table.allocateBlock(op));
-  },
+  }
 
-  debugger(ctx): Op {
+  debugger(ctx: CompilerContext): Pass3Op {
     return ctx.op('debugger', ctx.table.getEvalInfo());
-  },
+  }
 
-  hasBlock(ctx, op: PathHead): Op {
+  hasBlock(ctx: CompilerContext, op: PathHead): Pass3Op {
     if (op === 0) {
       return ctx.error('Cannot hasBlock this');
     }
 
     return ctx.op('hasBlock', ctx.table.allocateBlock(op));
-  },
+  }
 
-  hasBlockParams(ctx: CompilerContext, op: PathHead): JavaScriptCompilerOp {
+  hasBlockParams(ctx: CompilerContext, op: PathHead): Pass3Op {
     if (op === 0) {
       return ctx.error('Cannot hasBlockParams this');
     }
 
     return ctx.op('hasBlockParams', ctx.table.allocateBlock(op));
-  },
+  }
 
-  partial(ctx: CompilerContext): JavaScriptCompilerOp {
+  partial(ctx: CompilerContext): Pass3Op {
     return ctx.op('partial', ctx.table.getEvalInfo());
-  },
-};
+  }
+}
 
-export function allocate(ops: Opcode[], source: string) {
+const VISITOR: Visitor & Pass2Visitor = new Pass2Visitor();
+
+export function allocate(ops: Pass2Op[], source: string) {
   let context = new UnlocatedCompilerContext(source);
 
-  let out: JavaScriptCompilerOp[] = [];
+  let out: Pass3Op[] = [];
 
   for (let op of ops) {
     out.push(dispatch(context, op));
@@ -126,18 +121,30 @@ export function allocate(ops: Opcode[], source: string) {
   return out;
 }
 
-function dispatch(context: UnlocatedCompilerContext, op: Opcode): Op {
-  let { name, args, offsets } = op;
-  let ctx = context.forOffsets(offsets);
+function shouldVisit<N extends keyof Pass2Ops>(
+  visitor: Visitor,
+  op: Pass2Op<N> | { name: any }
+): op is {
+  name: N & keyof Pass2Visitor;
+  args: Pass2Ops[N]['args'];
+} {
+  return op.name in visitor;
+}
 
-  if (name in SymbolVisitor) {
-    let visit = SymbolVisitor[name];
+function dispatch<O extends Pass2Op>(context: UnlocatedCompilerContext, op: O): Pass3Op {
+  let ctx = context.forOffsets(op.offsets);
 
-    let result = (visit as any)(ctx, ...(args as any));
+  if (shouldVisit(VISITOR, op)) {
+    let visit = VISITOR[op.name] as (
+      ctx: CompilerContext,
+      args: typeof op['args']
+    ) => void | Pass3Op;
+
+    let result = visit(ctx, op.args);
     if (result) {
       return result;
     }
   }
 
-  return ctx.op(name as Op['name'], ...(args as Op['args'])) as Op;
+  return op as Pass3Op;
 }

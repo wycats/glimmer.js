@@ -1,7 +1,8 @@
 import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST, isLiteral } from '@glimmer/syntax';
-import { ProgramSymbolTable, SymbolTable } from '../template-visitor';
-import { CompilerContext, Opcode, Pass1Visitor } from './context';
+import { Pass2Op } from '../pass2/ops';
+import { SymbolTable } from '../template-visitor';
+import { CompilerContext, Pass1Visitor } from './context';
 import {
   DEBUGGER,
   hasPath,
@@ -24,7 +25,7 @@ export const HirStatements: Pass1Visitor['statements'] = {
     throw new Error(`Handlebars partials are not supported in Glimmer`);
   },
 
-  Block(block: AST.Block, ctx: CompilerContext): Opcode[] {
+  Block(block: AST.Block, ctx: CompilerContext): Pass2Op[] {
     return ctx.ops(
       ctx.startBlock(block),
       ctx.op('startBlock', block).loc(block),
@@ -34,7 +35,7 @@ export const HirStatements: Pass1Visitor['statements'] = {
     );
   },
 
-  BlockStatement(block: AST.BlockStatement, ctx: CompilerContext): Opcode[] {
+  BlockStatement(block: AST.BlockStatement, ctx: CompilerContext): Pass2Op[] {
     if (IN_ELEMENT.match(block)) {
       return IN_ELEMENT.opcode(block, ctx);
     } else {
@@ -48,14 +49,14 @@ export const HirStatements: Pass1Visitor['statements'] = {
     }
   },
 
-  ElementNode(element: AST.ElementNode, ctx: CompilerContext): Opcode[] {
+  ElementNode(element: AST.ElementNode, ctx: CompilerContext): Pass2Op[] {
     let classify = classifyElement(element, ctx.symbols.current);
 
     // are `@args` are allowed?
     let hasComponentFeatures =
       classify.is === 'component' || classify.is === 'dynamic' || classify.is === 'dynamic-tag';
 
-    function open(): Opcode[] {
+    function open(): Pass2Op[] {
       switch (classify.is) {
         case 'dynamic-tag':
           return ctx.ops(
@@ -70,16 +71,16 @@ export const HirStatements: Pass1Visitor['statements'] = {
           return ctx.ops(ctx.op('openComponent', element).loc(element));
 
         case 'dynamic':
-          return ctx.ops(ctx.op('openElement', element, false).loc(element));
+          return ctx.ops(ctx.op('openElement', { element, simple: false }).loc(element));
 
         case 'html':
-          return ctx.ops(ctx.op('openElement', element, true).loc(element));
+          return ctx.ops(ctx.op('openElement', { element, simple: true }).loc(element));
       }
     }
 
     let opcodes = open();
 
-    function close(): Opcode {
+    function close(): Pass2Op {
       switch (classify.is) {
         case 'dynamic-tag':
           return ctx.op('closeDynamicComponent', element).loc(element);
@@ -121,7 +122,7 @@ export const HirStatements: Pass1Visitor['statements'] = {
     return [];
   },
 
-  MustacheStatement(mustache: AST.MustacheStatement, ctx: CompilerContext): Opcode[] {
+  MustacheStatement(mustache: AST.MustacheStatement, ctx: CompilerContext): Pass2Op[] {
     let { path } = mustache;
 
     if (isLiteral(path)) {
@@ -165,11 +166,11 @@ export const HirStatements: Pass1Visitor['statements'] = {
     );
   },
 
-  TextNode(text: AST.TextNode, ctx: CompilerContext): Opcode {
+  TextNode(text: AST.TextNode, ctx: CompilerContext): Pass2Op {
     return ctx.op('text', text.chars).loc(text);
   },
 
-  CommentStatement(comment: AST.CommentStatement, ctx: CompilerContext): Opcode {
+  CommentStatement(comment: AST.CommentStatement, ctx: CompilerContext): Pass2Op {
     return ctx.op('comment', comment.value).loc(comment);
   },
 };
@@ -191,7 +192,6 @@ function classifyElement(element: AST.ElementNode, symbols: SymbolTable): Classi
 
   let [maybeLocal, ...rest] = element.tag.split('.');
   let isNamedArgument = open === '@';
-  // let isLocal = symbols.has(maybeLocal);
   let isThisPath = maybeLocal === 'this';
 
   if (isNamedBlock(element)) {

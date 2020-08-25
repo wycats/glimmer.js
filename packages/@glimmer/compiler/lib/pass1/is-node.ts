@@ -1,6 +1,7 @@
 import { ExpressionContext } from '@glimmer/interfaces';
 import { AST, builders, SyntaxError } from '@glimmer/syntax';
-import { CompilerContext, Opcode } from './context';
+import { Pass2Op } from '../pass2/ops';
+import { CompilerContext } from './context';
 
 export type Keyword = 'has-block' | 'has-block-params';
 
@@ -93,7 +94,7 @@ interface KeywordStatementNode<K extends string> extends HelperStatement {
 
 interface KeywordDelegate<N extends AST.BaseNode, V> {
   assert(node: N): V;
-  opcode(node: N, ctx: CompilerContext, param: V): Opcode[];
+  opcode(node: N, ctx: CompilerContext, param: V): Pass2Op[];
 }
 
 interface KeywordBlockNode<K extends string> extends HelperBlock {
@@ -111,7 +112,7 @@ class KeywordBlock<K extends string, V> {
     }
   }
 
-  opcode(mustache: KeywordBlockNode<K>, ctx: CompilerContext): Opcode[] {
+  opcode(mustache: KeywordBlockNode<K>, ctx: CompilerContext): Pass2Op[] {
     let param = this.delegate.assert(mustache);
     return this.delegate.opcode(mustache, ctx, param);
   }
@@ -124,7 +125,7 @@ class KeywordStatement<K extends string, V> {
     return mustache.path.original === this.keyword;
   }
 
-  opcode(mustache: KeywordStatementNode<K>, ctx: CompilerContext): Opcode[] {
+  opcode(mustache: KeywordStatementNode<K>, ctx: CompilerContext): Pass2Op[] {
     let param = this.delegate.assert(mustache);
     return this.delegate.opcode(mustache, ctx, param);
   }
@@ -141,7 +142,7 @@ class KeywordExpression<K extends string, V> {
     return mustache.path.original === this.keyword;
   }
 
-  opcode(mustache: KeywordExpressionNode<K>, ctx: CompilerContext): Opcode[] {
+  opcode(mustache: KeywordExpressionNode<K>, ctx: CompilerContext): Pass2Op[] {
     let param = this.delegate.assert(mustache);
     return this.delegate.opcode(mustache, ctx, param);
   }
@@ -173,7 +174,7 @@ export const IN_ELEMENT = new KeywordBlock('in-element', {
     block: KeywordBlockNode<'in-element'>,
     ctx: CompilerContext,
     hasInsertBefore: boolean
-  ): Opcode[] {
+  ): Pass2Op[] {
     let pairs = [...block.hash.pairs];
 
     pairs.push(builders.pair('guid', builders.string(ctx.cursor())));
@@ -219,7 +220,7 @@ export const YIELD = new KeywordStatement('yield', {
     }
   },
 
-  opcode(statement: KeywordStatementNode<'yield'>, ctx: CompilerContext, param: string): Opcode[] {
+  opcode(statement: KeywordStatementNode<'yield'>, ctx: CompilerContext, param: string): Pass2Op[] {
     return [...ctx.helper.params(statement), ctx.op('yield', param).loc(statement)];
   },
 });
@@ -255,7 +256,7 @@ export const PARTIAL = new KeywordStatement('partial', {
     }
   },
 
-  opcode(statement: KeywordStatementNode<'partial'>, ctx: CompilerContext): Opcode[] {
+  opcode(statement: KeywordStatementNode<'partial'>, ctx: CompilerContext): Pass2Op[] {
     return [...ctx.helper.params(statement), ctx.op('partial').loc(statement)];
   },
 });
@@ -276,7 +277,7 @@ export const DEBUGGER = new KeywordStatement('debugger', {
     }
   },
 
-  opcode(statement: KeywordStatementNode<'debugger'>, ctx: CompilerContext): Opcode[] {
+  opcode(statement: KeywordStatementNode<'debugger'>, ctx: CompilerContext): Pass2Op[] {
     return [ctx.op('debugger', null).loc(statement)];
   },
 });
@@ -285,7 +286,7 @@ export const HAS_BLOCK = new KeywordExpression('has-block', {
   assert(node: KeywordExpressionNode<'has-block'>): string {
     return assertValidHasBlockUsage('has-block', node);
   },
-  opcode(node: KeywordExpressionNode<'has-block'>, ctx: CompilerContext, param: string): Opcode[] {
+  opcode(node: KeywordExpressionNode<'has-block'>, ctx: CompilerContext, param: string): Pass2Op[] {
     return [ctx.op('hasBlock', param).loc(node)];
   },
 });
@@ -298,7 +299,7 @@ export const HAS_BLOCK_PARAMS = new KeywordExpression('has-block-params', {
     node: KeywordExpressionNode<'has-block-params'>,
     ctx: CompilerContext,
     target: string
-  ): Opcode[] {
+  ): Pass2Op[] {
     return [ctx.op('hasBlockParams', target).loc(node)];
   },
 });

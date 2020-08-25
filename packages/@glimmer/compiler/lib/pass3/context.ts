@@ -1,28 +1,30 @@
-import { Block, ComponentBlock, InlineBlock, Template } from './blocks';
-import { SerializedInlineBlock, WireFormat as WF, Option, WireFormat } from '@glimmer/interfaces';
-import { JavaScriptCompilerOp } from './ops';
+import { Option, WireFormat as WF, WireFormat } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import { assert, expect, Stack } from '@glimmer/util';
+import { Op, OpFactory, OpImpl, Ops } from '../ops/ops';
 import { SourceOffsets } from '../pass1/location';
-import { Op, OpFactory, Ops } from '../ops/ops';
-import { CompilerState } from '../pass1/context';
-import { Check, EXPR, STRING } from './checks';
+import { Block, ComponentBlock, InlineBlock, Template } from './blocks';
+import { Check } from './checks';
+import { Pass3Op } from './ops';
 
-type Tail<T extends any[]> = ((...args: T) => void) extends (head: any, ...tail: infer U) => any
+export type Tail<T extends any[]> = ((...args: T) => void) extends (
+  head: any,
+  ...tail: infer U
+) => any
   ? U
   : never;
 
-export type OpName = WireFormat.StatementSexpOpcode;
-export type OpMap = {
+export type OutOpName = WireFormat.StatementSexpOpcode;
+export type OutOpMap = {
   [P in keyof WireFormat.StatementSexpOpcodeMap]: Tail<WireFormat.StatementSexpOpcodeMap[P]>;
 };
 
 export class CompilerContext {
-  readonly #opcodes: readonly JavaScriptCompilerOp[];
+  readonly #opcodes: readonly Pass3Op[];
   readonly options: CompileOptions | undefined;
-  readonly factory: OpFactory<OpName, OpMap>;
+  readonly factory: OpFactory<OutOpName, OutOpMap>;
 
-  constructor(opcodes: readonly JavaScriptCompilerOp[], source: string, options?: CompileOptions) {
+  constructor(opcodes: readonly Pass3Op[], source: string, options?: CompileOptions) {
     this.#opcodes = opcodes;
     this.options = options;
     this.factory = new OpFactory(source);
@@ -98,15 +100,20 @@ export class CompilerHelpers {
     );
   }
 
-  op<N extends OpName>(name: N, ...args: OpMap[N]): Op<OpName, OpMap> {
-    return this.#ctx.factory.op(name, ...args).offsets(this.#offsets);
+  op<N extends OutOpName, Map extends OutOpMap[N] & void>(name: N): Op<OutOpName, OutOpMap>;
+  op<N extends OutOpName>(name: N, args: OutOpMap[N]): Op<OutOpName, OutOpMap>;
+  op<N extends OutOpName>(name: N, args?: OutOpMap[N]): Op<OutOpName, OutOpMap> {
+    return this.#ctx.factory.op(name, args as OutOpMap[N]).offsets(this.#offsets);
   }
 
-  ops(...ops: Ops<OpName, OpMap>[]): Op<OpName, OpMap>[] {
+  ops(...ops: Ops<OutOpName, OutOpMap>[]): OpImpl<OutOpName, OutOpMap>[] {
     return this.#ctx.factory.ops(...ops);
   }
 
-  map<T>(input: T[], callback: (input: T) => Op<OpName, OpMap>[]): Op<OpName, OpMap>[] {
+  map<T>(
+    input: T[],
+    callback: (input: T) => Op<OutOpName, OutOpMap>[]
+  ): OpImpl<OutOpName, OutOpMap>[] {
     return this.#ctx.factory.map(input, callback);
   }
 
@@ -154,10 +161,10 @@ export class CompilerHelpers {
     this.#state.blocks.push(block);
   }
 
-  endInlineBlock(): SerializedInlineBlock {
+  endInlineBlock(): void {
     let blocks = this.#state.blocks;
     let block = blocks.pop() as InlineBlock;
-    return block.toJSON();
+    this.template.block.blocks.push(block.toJSON());
   }
 
   pushValue<S extends WF.Expression | WF.Core.Params | WF.Core.Hash>(val: S) {

@@ -10,6 +10,8 @@
     "baseUrl": "packages",
     "rootDir": "packages",
 
+    "incremental": true,
+
     // Environment Configuration
     "experimentalDecorators": true,
     "moduleResolution": "node",

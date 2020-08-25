@@ -1,62 +1,60 @@
-import { AST } from '@glimmer/syntax';
 import { ExpressionContext, Option } from '@glimmer/interfaces';
-import { Op, OpFactory } from '../ops/ops';
+import { AST } from '@glimmer/syntax';
+import { Op } from '../ops/ops';
 
-export interface AllocateSymbolsOpTable {
-  startProgram: [AST.Template];
-  endProgram: [];
-  startBlock: [AST.Block];
-  endBlock: [];
-  append: [boolean];
-  text: [string];
-  comment: [string];
-  block: [boolean /* has inverse */];
-  yield: [string];
-  debugger: [null];
-  hasBlock: [string | 0];
-  hasBlockParams: [string | 0];
-  partial: [];
+export interface Pass2OpTable {
+  startProgram: AST.Template;
+  endProgram: void;
+  startBlock: AST.Block;
+  endBlock: void;
+  append: boolean;
 
-  openElement: [AST.ElementNode, boolean];
-  closeElement: [AST.ElementNode];
-  openComponent: [AST.ElementNode];
-  closeComponent: [AST.ElementNode];
-  openNamedBlock: [AST.ElementNode];
-  closeNamedBlock: [AST.ElementNode];
-  closeDynamicComponent: [AST.ElementNode];
-  flushElement: [AST.ElementNode];
+  text: string;
+  comment: string;
 
-  staticArg: [string];
-  dynamicArg: [string];
-  staticAttr: [string, Option<string>];
-  staticComponentAttr: [string, Option<string>];
-  componentAttr: [string, Option<string>];
-  dynamicAttr: [string, Option<string>];
-  trustingComponentAttr: [string, Option<string>];
-  trustingAttr: [string, Option<string>];
-  attrSplat: [];
+  openElement: { element: AST.ElementNode; simple: boolean };
+  closeElement: AST.ElementNode;
+  openComponent: AST.ElementNode;
+  closeComponent: AST.ElementNode;
+  openNamedBlock: AST.ElementNode;
+  closeNamedBlock: AST.ElementNode;
+  closeDynamicComponent: AST.ElementNode;
+  flushElement: AST.ElementNode;
 
-  getVar: [string, ExpressionContext];
-  getArg: [string];
-  getFree: [string];
-  getThis: [];
+  staticArg: string;
+  dynamicArg: string;
+  staticAttr: { name: string; namespace: Option<string> };
+  staticComponentAttr: { name: string; namespace: Option<string> };
+  componentAttr: { name: string; namespace: Option<string> };
+  dynamicAttr: { name: string; namespace: Option<string> };
+  trustingComponentAttr: { name: string; namespace: Option<string> };
+  trustingAttr: { name: string; namespace: Option<string> };
 
-  getPath: [string[]];
+  helper: {};
+  modifier: {};
+  block: boolean /* has inverse */;
+  attrSplat: {};
+  getPath: string[];
+  getVar: { var: string; context: ExpressionContext };
+  getArg: string;
+  getThis: {};
+  yield: string;
 
-  modifier: [];
-  helper: [];
+  literal: string | boolean | number | null | undefined;
+  concat: {};
 
-  literal: [string | boolean | number | null | undefined];
-  concat: [];
+  hasBlock: string | 0;
+  hasBlockParams: string | 0;
 
-  prepareArray: [number];
-  prepareObject: [number];
+  debugger: null;
+  partial: {};
+
+  prepareArray: number;
+  prepareObject: number;
 }
 
-export type AllocateSymbolsOps = {
-  [P in keyof AllocateSymbolsOpTable]: Op<P, AllocateSymbolsOpTable>;
+export type Pass2Ops = {
+  [P in keyof Pass2OpTable]: Op<P, Pass2OpTable>;
 };
 
-export type AllocateSymbolsOp<
-  P extends keyof AllocateSymbolsOps = keyof AllocateSymbolsOps
-> = AllocateSymbolsOps[P];
+export type Pass2Op<P extends keyof Pass2Ops = keyof Pass2Ops> = Pass2Ops[P];

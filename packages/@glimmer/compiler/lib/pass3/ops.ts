@@ -1,58 +1,60 @@
 import type { AST } from '@glimmer/syntax';
 import type { ExpressionContext, Option, WireFormat } from '@glimmer/interfaces';
-import { Op } from '../ops/ops';
+import { Op, OpImpl } from '../ops/ops';
 
-export interface JavaScriptCompilerOps {
-  startProgram: [AST.Template];
-  endProgram: [];
-  startBlock: [AST.Block];
-  endBlock: [];
-  append: [boolean];
+export interface Pass3OpsTable {
+  startProgram: AST.Template;
+  endProgram: void;
+  startBlock: AST.Block;
+  endBlock: void;
+  append: boolean;
 
-  text: [string];
-  comment: [string];
+  text: string;
+  comment: string;
 
-  openElement: [AST.ElementNode, boolean];
-  closeElement: [AST.ElementNode];
-  openComponent: [AST.ElementNode];
-  closeComponent: [AST.ElementNode];
-  openNamedBlock: [AST.ElementNode];
-  closeNamedBlock: [AST.ElementNode];
-  closeDynamicComponent: [AST.ElementNode];
-  flushElement: [AST.ElementNode];
+  openElement: { element: AST.ElementNode; simple: boolean };
+  closeElement: AST.ElementNode;
+  openComponent: AST.ElementNode;
+  closeComponent: AST.ElementNode;
+  openNamedBlock: AST.ElementNode;
+  closeNamedBlock: AST.ElementNode;
+  closeDynamicComponent: AST.ElementNode;
+  flushElement: AST.ElementNode;
 
-  staticArg: [string];
-  dynamicArg: [string];
-  staticAttr: [string, string?];
-  staticComponentAttr: [string, string?];
-  componentAttr: [string, string?];
-  dynamicAttr: [string, string?];
-  trustingComponentAttr: [string, string?];
-  trustingAttr: [string, string?];
+  staticArg: string;
+  dynamicArg: string;
+  staticAttr: { name: string; namespace?: string };
+  staticComponentAttr: { name: string; namespace?: string };
+  componentAttr: { name: string; namespace?: string };
+  dynamicAttr: { name: string; namespace?: string };
+  trustingComponentAttr: { name: string; namespace?: string };
+  trustingAttr: { name: string; namespace?: string };
 
-  helper: [];
-  modifier: [];
-  block: [boolean] /* has inverse */;
-  attrSplat: [Option<number>];
-  getPath: [string[]];
-  getSymbol: [number];
-  getFree: [number];
-  getFreeWithContext: [number, ExpressionContext];
-  yield: [number];
+  helper: void;
+  modifier: void;
+  block: boolean /* has inverse */;
+  attrSplat: Option<number>;
+  getPath: string[];
+  getSymbol: number;
+  getFree: number;
+  getFreeWithContext: { var: number; context: ExpressionContext };
+  yield: number;
 
-  literal: [string | boolean | number | null | undefined];
-  concat: [];
+  literal: string | boolean | number | null | undefined;
+  concat: void;
 
-  hasBlock: [number];
-  hasBlockParams: [number];
+  hasBlock: number;
+  hasBlockParams: number;
 
-  debugger: [WireFormat.Core.EvalInfo];
-  partial: [WireFormat.Core.EvalInfo];
+  debugger: WireFormat.Core.EvalInfo;
+  partial: WireFormat.Core.EvalInfo;
 
-  prepareArray: [number];
-  prepareObject: [number];
+  prepareArray: number;
+  prepareObject: number;
 }
 
-export type JavaScriptCompilerOp<
-  K extends keyof JavaScriptCompilerOps = keyof JavaScriptCompilerOps
-> = Op<K, JavaScriptCompilerOps>;
+export type Pass3Ops = {
+  [P in keyof Pass3OpsTable]: Op<P, Pass3OpsTable>;
+};
+
+export type Pass3Op<P extends keyof Pass3Ops = keyof Pass3Ops> = Pass3Ops[P];

@@ -1,9 +1,10 @@
 import { ExpressionContext } from '@glimmer/interfaces';
 import { AST, SyntaxError } from '@glimmer/syntax';
 import { assertNever } from '@glimmer/util';
-import { ProgramSymbolTable, SymbolTable } from '../template-visitor';
+import { Pass2Op } from '../pass2/ops';
+import { ProgramSymbolTable } from '../template-visitor';
 import { getAttrNamespace } from '../utils';
-import { CompilerContext, Opcode } from './context';
+import { CompilerContext } from './context';
 import { HirExpressions } from './expressions';
 import {
   assertIsSimpleHelper,
@@ -24,7 +25,7 @@ import { HirStatements } from './statements';
  */
 type TopLevelStatement = AST.Statement | AST.Block;
 
-export function visit(source: string, root: AST.Template): Opcode[] {
+export function visit(source: string, root: AST.Template): Pass2Op[] {
   let ctx = new CompilerContext(source, {
     expressions: HirExpressions,
     statements: HirStatements,
@@ -54,15 +55,15 @@ export class CompilerHelper {
     this.ctx = context;
   }
 
-  expr(node: AST.Expression, context: ExpressionContext): Opcode[] {
+  expr(node: AST.Expression, context: ExpressionContext): Pass2Op[] {
     return this.ctx.expr(node, context);
   }
 
-  stmt<T extends AST.Statement>(node: T): Opcode[] {
+  stmt<T extends AST.Statement>(node: T): Pass2Op[] {
     return this.ctx.stmt(node);
   }
 
-  attr(attr: AST.AttrNode, isComponent: boolean, elementNode: AST.ElementNode): Opcode[] {
+  attr(attr: AST.AttrNode, isComponent: boolean, elementNode: AST.ElementNode): Pass2Op[] {
     assertValidArgumentName(attr, isComponent, elementNode);
     let { name, value } = attr;
 
@@ -85,31 +86,31 @@ export class CompilerHelper {
         } else if (isComponent) {
           return this.ctx.ops(
             opcodes,
-            this.ctx.op('staticComponentAttr', name, namespace).loc(attr)
+            this.ctx.op('staticComponentAttr', { name, namespace }).loc(attr)
           );
         } else {
-          return this.ctx.ops(opcodes, this.ctx.op('staticAttr', name, namespace).loc(attr));
+          return this.ctx.ops(opcodes, this.ctx.op('staticAttr', { name, namespace }).loc(attr));
         }
       } else if (isTrusting) {
         if (isComponent) {
           return this.ctx.ops(
             opcodes,
-            this.ctx.op('trustingComponentAttr', name, namespace).loc(attr)
+            this.ctx.op('trustingComponentAttr', { name, namespace }).loc(attr)
           );
         } else {
-          return this.ctx.ops(opcodes, this.ctx.op('trustingAttr', name, namespace).loc(attr));
+          return this.ctx.ops(opcodes, this.ctx.op('trustingAttr', { name, namespace }).loc(attr));
         }
       } else {
         if (isComponent) {
-          return this.ctx.ops(opcodes, this.ctx.op('componentAttr', name, namespace).loc(attr));
+          return this.ctx.ops(opcodes, this.ctx.op('componentAttr', { name, namespace }).loc(attr));
         } else {
-          return this.ctx.ops(opcodes, this.ctx.op('dynamicAttr', name, namespace).loc(attr));
+          return this.ctx.ops(opcodes, this.ctx.op('dynamicAttr', { name, namespace }).loc(attr));
         }
       }
     }
   }
 
-  modifier(modifier: AST.ElementModifierStatement): Opcode[] {
+  modifier(modifier: AST.ElementModifierStatement): Pass2Op[] {
     return this.ctx.ops(
       this.args(modifier),
       this.ctx.expr(modifier.path, ExpressionContext.ModifierHead),
@@ -125,15 +126,15 @@ export class CompilerHelper {
     path: AST.Expression;
     params: AST.Expression[];
     hash: AST.Hash;
-  }): Opcode[] {
-    let opcodes: Opcode[] = [];
+  }): Pass2Op[] {
+    let opcodes: Pass2Op[] = [];
     opcodes.push(...this.hash(hash));
     opcodes.push(...this.params({ path, params }));
 
     return opcodes;
   }
 
-  params({ path, params: list }: { path: AST.Expression; params: AST.Expression[] }): Opcode[] {
+  params({ path, params: list }: { path: AST.Expression; params: AST.Expression[] }): Pass2Op[] {
     let offsets = paramsOffsets({ path, params: list }, this.ctx.source);
 
     if (list.length === 0) {
@@ -146,7 +147,7 @@ export class CompilerHelper {
     );
   }
 
-  hash(hash: AST.Hash): Opcode[] {
+  hash(hash: AST.Hash): Pass2Op[] {
     let pairs = hash.pairs;
 
     if (pairs.length === 0) {
@@ -164,7 +165,7 @@ export class CompilerHelper {
     );
   }
 
-  sexp(expr: AST.SubExpression): Opcode[] {
+  sexp(expr: AST.SubExpression): Pass2Op[] {
     if (isKeywordCall(expr)) {
       return this.keyword(expr);
     } else {
@@ -176,7 +177,7 @@ export class CompilerHelper {
     }
   }
 
-  concat(concat: AST.ConcatStatement): Opcode[] {
+  concat(concat: AST.ConcatStatement): Pass2Op[] {
     return this.ctx.ops(
       this.ctx.map([...concat.parts].reverse(), part => this.attrValue(part).opcodes),
       this.ctx.op('prepareArray', concat.parts.length).loc(concat)
@@ -185,7 +186,7 @@ export class CompilerHelper {
 
   attrValue(
     value: AST.TextNode | AST.MustacheStatement | AST.ConcatStatement
-  ): { opcodes: Opcode[]; isStatic: boolean } {
+  ): { opcodes: Pass2Op[]; isStatic: boolean } {
     if (value.type === 'ConcatStatement') {
       return {
         opcodes: this.ctx.ops(this.concat(value), this.ctx.op('concat').loc(value)),
@@ -224,7 +225,7 @@ export class CompilerHelper {
     }
   }
 
-  keyword(call: IsKeywordCall): Opcode[] {
+  keyword(call: IsKeywordCall): Pass2Op[] {
     if (HAS_BLOCK.match(call)) {
       return HAS_BLOCK.opcode(call, this.ctx);
     } else if (HAS_BLOCK_PARAMS.match(call)) {
@@ -234,7 +235,7 @@ export class CompilerHelper {
     }
   }
 
-  pathWithContext(path: AST.PathExpression, context: ExpressionContext): Opcode[] {
+  pathWithContext(path: AST.PathExpression, context: ExpressionContext): Pass2Op[] {
     let { parts } = path;
     if (path.data) {
       return this.argPath(`@${parts[0]}`, parts.slice(1), path);
@@ -245,7 +246,7 @@ export class CompilerHelper {
     }
   }
 
-  path(head: Opcode, rest: string[], node: AST.BaseNode): Opcode[] {
+  path(head: Pass2Op, rest: string[], node: AST.BaseNode): Pass2Op[] {
     if (rest.length === 0) {
       return [head];
     } else {
@@ -254,17 +255,17 @@ export class CompilerHelper {
     }
   }
 
-  argPath(head: string, rest: string[], node: AST.BaseNode): Opcode[] {
+  argPath(head: string, rest: string[], node: AST.BaseNode): Pass2Op[] {
     let headOp = this.ctx.op('getArg', head).loc(node);
     return this.path(headOp, rest, node);
   }
 
-  varPath(head: string, rest: string[], node: AST.BaseNode, context: ExpressionContext): Opcode[] {
-    let headOp = this.ctx.op('getVar', head, context).loc(node);
+  varPath(head: string, rest: string[], node: AST.BaseNode, context: ExpressionContext): Pass2Op[] {
+    let headOp = this.ctx.op('getVar', { var: head, context }).loc(node);
     return this.path(headOp, rest, node);
   }
 
-  thisPath(rest: string[], node: AST.BaseNode): Opcode[] {
+  thisPath(rest: string[], node: AST.BaseNode): Pass2Op[] {
     let headOp = this.ctx.op('getThis').loc(node);
     return this.path(headOp, rest, node);
   }

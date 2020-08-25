@@ -1,8 +1,8 @@
 import { ExpressionContext } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import { NonemptyStack } from '@glimmer/util';
-import { AllocateSymbolsOpTable } from '../pass2/ops';
 import { Op, OpFactory, Ops, UnlocatedOp } from '../ops/ops';
+import { Pass2Op, Pass2OpTable } from '../pass2/ops';
 import { SymbolTable } from '../template-visitor';
 import { CompilerHelper } from './index';
 
@@ -25,20 +25,21 @@ export class CompilerState {
   }
 }
 
-export type Opcode = Op<keyof AllocateSymbolsOpTable, AllocateSymbolsOpTable>;
-
 type NodeFor<N extends AST.BaseNode, K extends N['type']> = N extends { type: K } ? N : never;
 
 type Visitors<N extends AST.BaseNode> = {
-  [P in N['type']]: (node: NodeFor<N, P>, ctx: CompilerContext) => Opcode[] | Opcode;
+  [P in N['type']]: (node: NodeFor<N, P>, ctx: CompilerContext) => Pass2Op[] | Pass2Op;
 };
+
+type VisitorFunc<N extends AST.BaseNode> = (node: N, ctx: CompilerContext) => Pass2Op[] | Pass2Op;
 
 function visit<N extends AST.BaseNode>(
   visitors: Visitors<N>,
   node: N,
   ctx: CompilerContext
-): Opcode[] {
-  let result = visitors[node.type](node, ctx);
+): Pass2Op[] {
+  let f = visitors[node.type as N['type']] as VisitorFunc<N>;
+  let result = f(node, ctx);
 
   if (Array.isArray(result)) {
     return result;
@@ -52,8 +53,8 @@ export interface Pass1Visitor {
   statements: Visitors<TopLevelStatement>;
 }
 
-type OpName = keyof AllocateSymbolsOpTable;
-type OpMap = AllocateSymbolsOpTable;
+type OpName = keyof Pass2OpTable;
+type OpMap = Pass2OpTable;
 
 /**
  * All state in this object except the CompilerState must be readonly.
@@ -67,7 +68,7 @@ export class CompilerContext {
   readonly expressions: Visitors<AST.Expression | AST.ConcatStatement>;
   readonly state = new CompilerState();
   readonly helper: CompilerHelper;
-  private factory: OpFactory<keyof AllocateSymbolsOpTable, AllocateSymbolsOpTable>;
+  private factory: OpFactory<OpName, OpMap>;
 
   constructor(readonly source: string, visitor: Pass1Visitor) {
     this.helper = new CompilerHelper(this);
@@ -84,8 +85,10 @@ export class CompilerContext {
     return this.state.cursor();
   }
 
-  op<N extends OpName>(name: N, ...args: OpMap[N]): UnlocatedOp<OpName, OpMap> {
-    return this.factory.op(name, ...args);
+  op<N extends OpName, Map extends OpMap[N] & void>(name: N): UnlocatedOp<OpName, OpMap>;
+  op<N extends OpName>(name: N, args: OpMap[N]): UnlocatedOp<OpName, OpMap>;
+  op<N extends OpName>(name: N, args?: OpMap[N]): UnlocatedOp<OpName, OpMap> {
+    return this.factory.op(name, args as OpMap[N]);
   }
 
   ops(...ops: Ops<OpName, OpMap>[]): Op<OpName, OpMap>[] {
@@ -109,7 +112,7 @@ export class CompilerContext {
     return [];
   }
 
-  expr(node: AST.Expression | null, context: ExpressionContext): Opcode[] {
+  expr(node: AST.Expression | null, context: ExpressionContext): Pass2Op[] {
     if (node === null) {
       return [];
     } else if (node.type === 'PathExpression') {
@@ -119,7 +122,7 @@ export class CompilerContext {
     }
   }
 
-  stmt<T extends TopLevelStatement>(node: T | null): Opcode[] {
+  stmt<T extends TopLevelStatement>(node: T | null): Pass2Op[] {
     if (node === null) {
       return [];
     } else {

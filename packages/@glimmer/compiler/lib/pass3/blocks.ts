@@ -47,10 +47,6 @@ export class TemplateBlock extends Block {
     super();
   }
 
-  push(statement: WF.Statement) {
-    this.statements.push(statement);
-  }
-
   toJSON(): SerializedTemplateBlock {
     return {
       symbols: this.symbolTable.symbols,
@@ -72,19 +68,21 @@ export class ComponentBlock extends Block {
     super();
   }
 
-  push(statement: WF.Statement) {
-    if (this.inParams) {
-      if (isFlushElement(statement)) {
-        this.inParams = false;
-      } else if (isArgument(statement)) {
-        this.arguments.push(statement);
-      } else if (isAttribute(statement)) {
-        this.attributes.push(statement);
+  push(...statements: WF.Statement[]) {
+    for (let statement of statements) {
+      if (this.inParams) {
+        if (isFlushElement(statement)) {
+          this.inParams = false;
+        } else if (isArgument(statement)) {
+          this.arguments.push(statement);
+        } else if (isAttribute(statement)) {
+          this.attributes.push(statement);
+        } else {
+          throw new Error('Compile Error: only parameters allowed before flush-element');
+        }
       } else {
-        throw new Error('Compile Error: only parameters allowed before flush-element');
+        this.statements.push(statement);
       }
-    } else {
-      this.statements.push(statement);
     }
   }
 
