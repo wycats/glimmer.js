@@ -1,11 +1,6 @@
-import { AST } from '@glimmer/syntax';
-import { Option, WireFormat, ExpressionContext } from '@glimmer/interfaces';
-
-/**
-  - 0 - represents `this`
-  - string - represents any other path
- */
-export type PathHead = string | 0;
+import type { AST } from '@glimmer/syntax';
+import type { ExpressionContext, Option, WireFormat } from '@glimmer/interfaces';
+import { Op } from '../ops/ops';
 
 export interface JavaScriptCompilerOps {
   text: [string];
@@ -46,4 +41,4 @@ export interface JavaScriptCompilerOps {
 
 export type JavaScriptCompilerOp<
   K extends keyof JavaScriptCompilerOps = keyof JavaScriptCompilerOps
-> = [K, ...JavaScriptCompilerOps[K]];
+> = Op<K, JavaScriptCompilerOps>;

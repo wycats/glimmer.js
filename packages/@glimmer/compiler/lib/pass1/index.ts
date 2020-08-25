@@ -1,7 +1,7 @@
 import { ExpressionContext } from '@glimmer/interfaces';
 import { AST, SyntaxError } from '@glimmer/syntax';
 import { assertNever } from '@glimmer/util';
-import { SymbolTable } from '../template-visitor';
+import { ProgramSymbolTable, SymbolTable } from '../template-visitor';
 import { getAttrNamespace } from '../utils';
 import { CompilerContext, Opcode } from './context';
 import { HirExpressions } from './expressions';
@@ -22,7 +22,7 @@ import { HirStatements } from './statements';
  * only nested inside of a specific part of the ElementNode, so we can handle it (in
  * context) there and not have to worry about generically seeing one of them in content.
  */
-type TopLevelStatement = AST.Statement | AST.Template | AST.Block;
+type TopLevelStatement = AST.Statement | AST.Block;
 
 export function visit(source: string, root: AST.Template): Opcode[] {
   let ctx = new CompilerContext(source, {
@@ -30,7 +30,7 @@ export function visit(source: string, root: AST.Template): Opcode[] {
     statements: HirStatements,
   });
 
-  root.symbols = ctx.symbols.current as SymbolTable;
+  root.symbols = ctx.symbols.current as ProgramSymbolTable;
 
   return ctx.ops(
     ctx.op('startProgram', root).loc(root),
@@ -52,10 +52,6 @@ export class CompilerHelper {
 
   constructor(context: CompilerContext) {
     this.ctx = context;
-  }
-
-  root(node: AST.Template): Opcode[] {
-    return this.ctx.stmt(node);
   }
 
   expr(node: AST.Expression, context: ExpressionContext): Opcode[] {
@@ -245,9 +241,6 @@ export class CompilerHelper {
     } else if (path.this) {
       return this.thisPath(parts, path);
     } else {
-      if (context === undefined) {
-        debugger;
-      }
       return this.varPath(parts[0], parts.slice(1), path, context);
     }
   }

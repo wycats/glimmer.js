@@ -1,5 +1,4 @@
 import { preprocess } from '@glimmer/syntax';
-import TemplateCompiler, { CompileOptions } from './template-compiler';
 import {
   Option,
   TemplateJavascript,
@@ -7,10 +6,10 @@ import {
   SerializedTemplate,
 } from '@glimmer/interfaces';
 import { PreprocessOptions } from '@glimmer/syntax';
-import { SymbolAllocator } from './allocate-symbols';
 import JavaScriptCompiler from './javascript-compiler';
 import { LOCAL_SHOULD_LOG } from '@glimmer/local-debug-flags';
 import { visit } from './pass1/index';
+import { allocate } from './pass2/index';
 
 export interface TemplateIdFn {
   (src: string): Option<string>;
@@ -65,40 +64,6 @@ const defaultOptions: PrecompileOptions = {
  * @param {string} string a Glimmer template string
  * @return {string} a template javascript string
  */
-export function precompile1(string: string, options?: PrecompileOptions): TemplateJavascript;
-export function precompile1(
-  string: string,
-  options: PrecompileOptions = defaultOptions
-): TemplateJavascript {
-  let ast = preprocess(string, options);
-  let { meta } = options;
-  let { block } = TemplateCompiler.compile(ast, string, options);
-  let idFn = options.id || defaultId;
-  let blockJSON = JSON.stringify(block.toJSON());
-  let templateJSONObject: SerializedTemplateWithLazyBlock<unknown> = {
-    id: idFn(JSON.stringify(meta) + blockJSON),
-    block: blockJSON,
-    meta,
-  };
-
-  // JSON is javascript
-  return JSON.stringify(templateJSONObject);
-}
-
-/*
- * Compile a string into a template javascript string.
- *
- * Example usage:
- *     import { precompile } from '@glimmer/compiler';
- *     import { templateFactory } from 'glimer-runtime';
- *     let templateJs = precompile("Howdy {{name}}");
- *     let factory = templateFactory(new Function("return " + templateJs)());
- *     let template = factory.create(env);
- *
- * @method precompile
- * @param {string} string a Glimmer template string
- * @return {string} a template javascript string
- */
 export function precompileJSON(
   string: string,
   options?: PrecompileOptions
@@ -110,9 +75,9 @@ export function precompileJSON(
   let ast = preprocess(string, options);
   let { meta } = options;
   let opcodes = visit(string, ast);
-  let { ops } = new SymbolAllocator(opcodes, null).process();
+  let ops = allocate(opcodes, string);
 
-  let template = JavaScriptCompiler.process(ops, [], ast.symbols!, options);
+  let template = JavaScriptCompiler.process(ops, ast.symbols!, options);
 
   if (LOCAL_SHOULD_LOG) {
     console.log(`Template ->`, template);
@@ -146,9 +111,9 @@ export function precompile(
   let ast = preprocess(string, options);
   let { meta } = options;
   let opcodes = visit(string, ast);
-  let { ops } = new SymbolAllocator(opcodes, null).process();
+  let ops = allocate(opcodes, string);
 
-  let template = JavaScriptCompiler.process(ops, [], ast.symbols!, options);
+  let template = JavaScriptCompiler.process(ops, ast.symbols!, options);
 
   if (LOCAL_SHOULD_LOG) {
     console.log(`Template ->`, template);

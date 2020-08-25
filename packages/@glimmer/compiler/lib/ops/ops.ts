@@ -1,6 +1,6 @@
 import { SourceLocation, SourcePosition } from '@glimmer/syntax';
-import { SourceOffsets } from '../../pass1/location';
-import { locationToOffset } from '../location';
+import { positionToOffset } from '../location';
+import { SourceOffsets } from '../pass1/location';
 
 export type ArgsMap<K extends string> = {
   [P in K]: unknown[];
@@ -52,8 +52,8 @@ export type LocatedWithOffsets = { offsets: SourceOffsets };
 export type LocatedWithPositions = { loc: SourceLocation };
 
 function range(first: SourcePosition, last: SourcePosition, source: string): SourceOffsets | null {
-  let start = locationToOffset(source, first.line, first.column);
-  let end = locationToOffset(source, last.line, last.column);
+  let start = positionToOffset(source, first.line, first.column);
+  let end = positionToOffset(source, last.line, last.column);
 
   if (start === null || end === null) {
     return null;
@@ -110,5 +110,5 @@ export class UnlocatedOp<K extends string, Map extends ArgsMap<K>> {
 }
 
 export class Op<K extends string, Map extends ArgsMap<K>> {
-  constructor(readonly name: K, readonly args: Map[K], readonly loc: SourceOffsets | null) {}
+  constructor(readonly name: K, readonly args: Map[K], readonly offsets: SourceOffsets | null) {}
 }

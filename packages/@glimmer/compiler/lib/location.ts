@@ -1,8 +1,10 @@
 import { Option } from '@glimmer/interfaces';
+import { SourceLocation, SourcePosition } from '@glimmer/syntax';
+import { SourceOffsets } from './pass1/location';
 
 type SourceOffset = number;
 
-export function locationToOffset(
+export function positionToOffset(
   source: string,
   line: number,
   column: number
@@ -28,12 +30,7 @@ export function locationToOffset(
   }
 }
 
-interface SourceLocation {
-  line: number;
-  column: number;
-}
-
-export function offsetToLocation(source: string, offset: number): Option<SourceLocation> {
+export function offsetToPosition(source: string, offset: number): Option<SourcePosition> {
   let seenLines = 0;
   let seenChars = 0;
 
@@ -54,4 +51,18 @@ export function offsetToLocation(source: string, offset: number): Option<SourceL
       seenChars = nextLine + 1;
     }
   }
+}
+
+export function offsetsToLocation(source: string, offsets: SourceOffsets): Option<SourceLocation> {
+  let start = offsetToPosition(source, offsets.start);
+  let end = offsetToPosition(source, offsets.end);
+
+  if (start === null || end === null) {
+    return null;
+  }
+
+  return {
+    start,
+    end,
+  };
 }

@@ -1,6 +1,6 @@
 import { AST } from '@glimmer/syntax';
 import { assert } from '@glimmer/util';
-import { locationToOffset } from '../location';
+import { positionToOffset } from '../location';
 import { isPresent } from './is-node';
 
 export interface SourceOffsets {
@@ -33,14 +33,14 @@ function sourceOffsets(
   let loc = node.loc;
 
   let { start, end } = loc;
-  let startOffset = locationToOffset(source, start.line - 1, start.column);
+  let startOffset = positionToOffset(source, start.line - 1, start.column);
 
   // TODO: Is it important to support buggy transformations? Should we have a strict mode to start ferreting them out?
   // assert(
   //   startOffset !== null,
   //   `unexpected offset (${start.line}:${start.column}) that didn't correspond to a source location`
   // );
-  let endOffset = locationToOffset(source, end.line - 1, end.column);
+  let endOffset = positionToOffset(source, end.line - 1, end.column);
   // assert(
   //   endOffset !== null,
   //   `unexpected offset (${end.line}:${end.column}) that didn't correspond to a source location`

@@ -3,7 +3,7 @@ import { Stack, DictSet, Option, expect } from '@glimmer/util';
 import { AST } from '@glimmer/syntax';
 import { CompileOptions } from './template-compiler';
 import { isArgument, isAttribute, isFlushElement } from '@glimmer/wire-format';
-import { Processor, JavaScriptCompilerOps, Ops, SourceLocation } from './compiler-ops';
+
 import {
   WireFormat,
   SerializedInlineBlock,
@@ -20,6 +20,8 @@ import { expressionContextOp } from './builder';
 export type str = string;
 import Core = WireFormat.Core;
 import { deflateAttrName } from './utils';
+import { JavaScriptCompilerOp } from './pass3/ops';
+import { SourceOffsets } from './pass1/location';
 export type Params = WireFormat.Core.Params;
 export type ConcatParams = WireFormat.Core.ConcatParams;
 export type Hash = WireFormat.Core.Hash;
@@ -157,33 +159,21 @@ export class Template {
   }
 }
 
-type Input = readonly Ops<JavaScriptCompilerOps>[];
+type Input = readonly JavaScriptCompilerOp[];
 
-export default class JavaScriptCompiler implements Processor<JavaScriptCompilerOps> {
-  static process(
-    opcodes: Input,
-    locations: readonly Option<SourceLocation>[],
-    symbols: AST.ProgramSymbols,
-    options?: CompileOptions
-  ): Template {
-    let compiler = new JavaScriptCompiler(opcodes, symbols, locations, options);
+export default class JavaScriptCompiler {
+  static process(opcodes: Input, symbols: AST.ProgramSymbols, options?: CompileOptions): Template {
+    let compiler = new JavaScriptCompiler(opcodes, symbols, options);
     return compiler.process();
   }
 
   private readonly template: Template;
   private readonly blocks = new Stack<Block>();
-  private readonly opcodes: readonly Ops<JavaScriptCompilerOps>[];
+  private readonly opcodes: readonly JavaScriptCompilerOp[];
   private readonly values: StackValue[] = [];
   private readonly options: CompileOptions | undefined;
-  private location: Option<SourceLocation> = null;
-  private locationStack: Option<SourceLocation>[] = [];
 
-  constructor(
-    opcodes: Input,
-    symbols: AST.ProgramSymbols,
-    private locations: readonly Option<SourceLocation>[],
-    options?: CompileOptions
-  ) {
+  constructor(opcodes: Input, symbols: AST.ProgramSymbols, options?: CompileOptions) {
     this.opcodes = opcodes;
     this.template = new Template(symbols);
     this.options = options;
@@ -205,15 +195,13 @@ export default class JavaScriptCompiler implements Processor<JavaScriptCompilerO
 
   process(): Template {
     this.opcodes.forEach((op, i) => {
-      let [opcode, ...arg] = op;
-      this.location = this.locations[i];
-
-      if (!this[opcode]) {
-        throw new Error(`unimplemented ${opcode} on JavaScriptCompiler`);
+      if (!this[op.name]) {
+        throw new Error(`unimplemented ${name} on JavaScriptCompiler`);
       }
 
-      this[opcode as any](...arg);
+      this[op.name](...op.args);
     });
+    console.log(this.template);
     return this.template;
   }
 
@@ -548,19 +536,17 @@ export default class JavaScriptCompiler implements Processor<JavaScriptCompilerO
 
   pushValue<S extends Expression | Params | Hash>(val: S) {
     this.values.push(val);
-    this.locationStack.push(this.location);
   }
 
-  popLocatedValue<T extends StackValue>(): { value: T; location: Option<SourceLocation> } {
+  popLocatedValue<T extends StackValue>(): { value: T; location: Option<SourceOffsets> } {
     assert(this.values.length, 'No expression found on stack');
     let value = this.values.pop() as T;
-    let location = this.locationStack.pop() || null;
 
     // if (location === undefined) {
     //   throw new Error('Unbalanced location push and pop');
     // }
 
-    return { value, location };
+    return { value, location: null };
   }
 
   popValue<T extends StackValue>(): T {

@@ -17,20 +17,11 @@ import {
  * only nested inside of a specific part of the ElementNode, so we can handle it (in
  * context) there and not have to worry about generically seeing one of them in content.
  */
-type TopLevelStatement = AST.Statement | AST.Template | AST.Block;
+type TopLevelStatement = AST.Statement | AST.Block;
 
 export const HirStatements: Pass1Visitor['statements'] = {
   PartialStatement(): never {
     throw new Error(`Handlebars partials are not supported in Glimmer`);
-  },
-
-  Template(program: AST.Template, ctx: CompilerContext): Opcode[] {
-    program.symbols = ctx.symbols.current as ProgramSymbolTable;
-    return ctx.ops(
-      ctx.op('startProgram', program).loc(program),
-      ctx.map(program.body as TopLevelStatement[], statement => ctx.stmt(statement)),
-      ctx.op('endProgram').loc(program)
-    );
   },
 
   Block(block: AST.Block, ctx: CompilerContext): Opcode[] {

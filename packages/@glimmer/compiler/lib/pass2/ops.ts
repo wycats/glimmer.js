@@ -1,6 +1,6 @@
 import { AST } from '@glimmer/syntax';
 import { ExpressionContext, Option } from '@glimmer/interfaces';
-import { Op, OpFactory } from './ops';
+import { Op, OpFactory } from '../ops/ops';
 
 export interface AllocateSymbolsOpTable {
   startProgram: [AST.Template];
@@ -13,8 +13,8 @@ export interface AllocateSymbolsOpTable {
   block: [boolean /* has inverse */];
   yield: [string];
   debugger: [null];
-  hasBlock: [string];
-  hasBlockParams: [string];
+  hasBlock: [string | 0];
+  hasBlockParams: [string | 0];
   partial: [];
 
   openElement: [AST.ElementNode, boolean];

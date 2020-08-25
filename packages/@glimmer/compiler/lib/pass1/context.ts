@@ -1,7 +1,7 @@
 import { ExpressionContext } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import { NonemptyStack } from '@glimmer/util';
-import { AllocateSymbolsOpTable } from '../ops/allocate-symbols';
+import { AllocateSymbolsOpTable } from '../pass2/ops';
 import { Op, OpFactory, Ops, UnlocatedOp } from '../ops/ops';
 import { SymbolTable } from '../template-visitor';
 import { CompilerHelper } from './index';
@@ -11,7 +11,7 @@ import { CompilerHelper } from './index';
  * only nested inside of a specific part of the ElementNode, so we can handle it (in
  * context) there and not have to worry about generically seeing one of them in content.
  */
-type TopLevelStatement = AST.Statement | AST.Template | AST.Block;
+type TopLevelStatement = AST.Statement | AST.Block;
 
 /**
  * This is the mutable state for this compiler pass.
@@ -24,9 +24,6 @@ export class CompilerState {
     return `%cursor:${this.cursorCount++}%`;
   }
 }
-type Opcodes = {
-  [P in keyof AllocateSymbolsOpTable]: Op<P, AllocateSymbolsOpTable>;
-};
 
 export type Opcode = Op<keyof AllocateSymbolsOpTable, AllocateSymbolsOpTable>;
 
