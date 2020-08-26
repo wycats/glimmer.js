@@ -39,7 +39,7 @@ export class OpFactory<K extends string | number, Map extends ArgsMap<K>> {
     return out;
   }
 
-  map<T>(input: T[], callback: (input: T) => Op<K, Map>[]): Op<K, Map>[] {
+  map<T, N extends K>(input: T[], callback: (input: T) => Op<N, Map>[]): Op<K, Map>[] {
     let out = [];
 
     for (let v of input) {
@@ -53,7 +53,11 @@ export class OpFactory<K extends string | number, Map extends ArgsMap<K>> {
 export type LocatedWithOffsets = { offsets: SourceOffsets };
 export type LocatedWithPositions = { loc: SourceLocation };
 
-function range(first: SourcePosition, last: SourcePosition, source: string): SourceOffsets | null {
+export function range(
+  first: SourcePosition,
+  last: SourcePosition,
+  source: string
+): SourceOffsets | null {
   let start = positionToOffset(source, first.line, first.column);
   let end = positionToOffset(source, last.line, last.column);
 

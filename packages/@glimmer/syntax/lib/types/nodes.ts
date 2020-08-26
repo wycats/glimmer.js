@@ -47,7 +47,7 @@ export interface Position {
 }
 
 export interface CommonProgram extends BaseNode {
-  body: TopLevelStatement[];
+  body: Statement[];
   blockParams: string[];
   chained?: boolean;
 }
@@ -148,7 +148,7 @@ export interface ElementNode extends BaseNode {
   blockParams: string[];
   modifiers: ElementModifierStatement[];
   comments: MustacheCommentStatement[];
-  children: TopLevelStatement[];
+  children: Statement[];
 
   symbols?: BlockSymbols;
 }

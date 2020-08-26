@@ -6,8 +6,7 @@ type SourceOffset = number;
 
 export function positionToOffset(
   source: string,
-  line: number,
-  column: number
+  { line, column }: { line: number; column: number }
 ): Option<SourceOffset> {
   let seenLines = 0;
   let seenChars = 0;
@@ -50,6 +49,17 @@ export function offsetToPosition(source: string, offset: number): Option<SourceP
       seenLines += 1;
       seenChars = nextLine + 1;
     }
+  }
+}
+
+export function locationToOffsets(source: string, location: SourceLocation): Option<SourceOffsets> {
+  let start = positionToOffset(source, location.start);
+  let end = positionToOffset(source, location.end);
+
+  if (start === null || end === null) {
+    return null;
+  } else {
+    return { start, end };
   }
 }
 
