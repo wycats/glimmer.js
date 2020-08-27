@@ -1,10 +1,11 @@
-import { ExpressionContext } from '@glimmer/interfaces';
-import { AST } from '@glimmer/syntax';
 import { NonemptyStack } from '@glimmer/util';
-import { Op, OpFactory, Ops, UnlocatedOp } from '../shared/ops';
-import { Pass2Op, Pass2OpTable } from '../pass2/ops';
+import * as pass2 from '../pass2/ops';
+import { SourceOffsets } from '../shared/location';
+import { InputOpArgs, Op, OpArgs, OpConstructor, UnlocatedOp } from '../shared/op';
+import { OpFactory, Ops } from '../shared/ops';
 import { SymbolTable } from '../template-visitor';
 import { CompilerHelper } from './index';
+import * as pass1 from './ops';
 
 /**
  * This is the mutable state for this compiler pass.
@@ -18,17 +19,22 @@ export class CompilerState {
   }
 }
 
-type NodeFor<N extends AST.BaseNode, K extends N['type']> = N extends { type: K } ? N : never;
-
-type Visitors<N extends AST.BaseNode> = {
-  [P in N['type']]: (node: NodeFor<N, P>, ctx: Context) => Pass2Op[] | Pass2Op;
+type Visitors<O extends pass1.AnyOp> = {
+  [P in O['name']]: (
+    op: O extends infer ThisOp & { name: P }
+      ? ThisOp extends Op<unknown>
+        ? OpArgs<ThisOp>
+        : never
+      : never,
+    ctx: Context
+  ) => pass2.Op[] | pass2.Op;
 };
 
-type VisitorFunc<N extends AST.BaseNode> = (node: N, ctx: Context) => Pass2Op[] | Pass2Op;
+type VisitorFunc<N extends pass1.AnyOp> = (op: N['args'], ctx: Context) => pass2.Op[] | pass2.Op;
 
-function visit<N extends AST.BaseNode>(visitors: Visitors<N>, node: N, ctx: Context): Pass2Op[] {
-  let f = visitors[node.type as N['type']] as VisitorFunc<N>;
-  let result = f(node, ctx);
+function visit<N extends pass1.AnyOp>(visitors: Visitors<N>, node: N, ctx: Context): pass2.Op[] {
+  let f = visitors[node.name as N['name']] as VisitorFunc<pass1.AnyOp>;
+  let result = f(node.args, ctx);
 
   if (Array.isArray(result)) {
     return result;
@@ -38,12 +44,22 @@ function visit<N extends AST.BaseNode>(visitors: Visitors<N>, node: N, ctx: Cont
 }
 
 export interface Pass1Visitor {
-  expressions: Visitors<AST.Expression | AST.ConcatStatement>;
-  statements: Visitors<AST.TopLevelStatement>;
+  expressions: Visitors<pass1.Expr>;
+  statements: Visitors<pass1.Statement>;
 }
 
-type OpName = keyof Pass2OpTable;
-type OpMap = Pass2OpTable;
+export class CompilerContext {
+  readonly state = new CompilerState();
+  readonly factory: OpFactory<pass2.Op>;
+
+  constructor(readonly source: string, readonly visitor: Pass1Visitor) {
+    this.factory = new OpFactory(source);
+  }
+
+  forOffsets(offsets: SourceOffsets | null): Context {
+    return new Context(this, offsets);
+  }
+}
 
 /**
  * All state in this object except the CompilerState must be readonly.
@@ -53,69 +69,71 @@ type OpMap = Pass2OpTable;
  * has no mutable state at all.
  */
 export class Context {
-  readonly statements: Visitors<AST.TopLevelStatement>;
-  readonly expressions: Visitors<AST.Expression | AST.ConcatStatement>;
-  readonly state = new CompilerState();
   readonly helper: CompilerHelper;
-  private factory: OpFactory<OpName, OpMap>;
 
-  constructor(readonly source: string, visitor: Pass1Visitor) {
+  constructor(readonly ctx: CompilerContext, readonly offsets: SourceOffsets | null) {
     this.helper = new CompilerHelper(this);
-    this.statements = visitor.statements;
-    this.expressions = visitor.expressions;
-    this.factory = new OpFactory(source);
   }
 
   get symbols() {
-    return this.state.symbols;
+    return this.ctx.state.symbols;
+  }
+
+  get table() {
+    return this.symbols.current;
   }
 
   cursor(): string {
-    return this.state.cursor();
+    return this.ctx.state.cursor();
   }
 
-  op<N extends OpName, Map extends OpMap[N] & void>(name: N): UnlocatedOp<OpName, OpMap>;
-  op<N extends OpName>(name: N, args: OpMap[N]): UnlocatedOp<OpName, OpMap>;
-  op<N extends OpName>(name: N, args?: OpMap[N]): UnlocatedOp<OpName, OpMap> {
-    return this.factory.op(name, args as OpMap[N]);
+  op<O extends pass2.Op>(name: OpConstructor<O>, ...args: InputOpArgs<O>): O {
+    return this.unlocatedOp(name, ...args).offsets(this.offsets);
   }
 
-  ops(...ops: Ops<OpName, OpMap>[]): Op<OpName, OpMap>[] {
-    return this.factory.ops(...ops);
+  unlocatedOp<O extends pass2.Op>(name: OpConstructor<O>, ...args: InputOpArgs<O>): UnlocatedOp<O> {
+    return this.ctx.factory.op(name, ...args);
   }
 
-  map<T>(input: T[], callback: (input: T) => Op<OpName, OpMap>[]): Op<OpName, OpMap>[] {
-    return this.factory.map(input, callback);
+  ops(...ops: Ops<pass2.Op>[]): pass2.Op[] {
+    return this.ctx.factory.ops(...ops);
   }
 
-  startBlock(block: AST.Block | AST.ElementNode): [] {
-    let child = this.symbols.current.child(block.blockParams);
-    block.symbols = child;
-    this.symbols.push(child);
-
-    return [];
+  map<T>(input: T[], callback: (input: T) => pass2.Op[]): pass2.Op[] {
+    return this.ctx.factory.map(input, callback);
   }
 
-  endBlock(): [] {
-    this.symbols.pop();
-    return [];
-  }
+  withBlock<T>(symbols: SymbolTable, callback: () => T): T {
+    this.symbols.push(symbols);
 
-  expr(node: AST.Expression | null, context: ExpressionContext): Pass2Op[] {
-    if (node === null) {
-      return [];
-    } else if (node.type === 'PathExpression') {
-      return this.helper.pathWithContext(node, context);
-    } else {
-      return visit(this.expressions, node, this);
+    try {
+      return callback();
+    } finally {
+      this.symbols.pop();
     }
   }
 
-  stmt<T extends AST.TopLevelStatement>(node: T | null): Pass2Op[] {
+  startBlock(symbols: SymbolTable): void {
+    this.symbols.push(symbols);
+  }
+
+  endBlock(): void {
+    this.symbols.pop();
+  }
+
+  visitExpr(node: pass1.Expr | null): pass2.Op[] {
     if (node === null) {
       return [];
     } else {
-      return visit(this.statements, node, this);
+      return visit(this.ctx.visitor.expressions, node, this);
+    }
+  }
+
+  visitStmt<T extends pass1.Statement>(node: T | null): pass2.Op[] {
+    if (node === null) {
+      return [];
+    } else {
+      return visit(this.ctx.visitor.statements, node, this);
     }
   }
 }

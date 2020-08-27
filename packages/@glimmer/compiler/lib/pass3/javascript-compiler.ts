@@ -100,10 +100,12 @@ class WFVisitor implements Visitor {
     return helpers.op(SexpOpcodes.TrustingAppend, [content]);
   }
 
-  append(helpers: CompilerHelpers, trusted: boolean) {
-    return helpers.op(trusted ? SexpOpcodes.TrustingAppend : SexpOpcodes.Append, [
-      helpers.popValue(EXPR),
-    ]);
+  appendTextNode(helpers: CompilerHelpers) {
+    return helpers.op(SexpOpcodes.Append, [helpers.popValue(EXPR)]);
+  }
+
+  appendTrustedHTML(helpers: CompilerHelpers) {
+    return helpers.op(SexpOpcodes.TrustingAppend, [helpers.popValue(EXPR)]);
   }
 
   comment(helpers: CompilerHelpers, value: string) {
@@ -157,24 +159,20 @@ class WFVisitor implements Visitor {
     helpers.startBlock(component);
   }
 
-  openNamedBlock(helpers: CompilerHelpers, element: AST.ElementNode) {
-    let block: Block = new NamedBlock(element.tag, element.symbols!);
+  openNamedBlock(
+    helpers: CompilerHelpers,
+    { tag, symbols }: { tag: string; symbols: AST.BlockSymbols }
+  ) {
+    let block: Block = new NamedBlock(tag, symbols);
     helpers.startBlock(block);
   }
 
-  openElement(
-    helpers: CompilerHelpers,
-    { element, simple }: { element: AST.ElementNode; simple: boolean }
-  ) {
-    let tag = element.tag;
+  openSimpleElement(helpers: CompilerHelpers, { tag }: { tag: string }) {
+    return helpers.op(SexpOpcodes.OpenElement, [tag]);
+  }
 
-    if (element.blockParams.length > 0) {
-      throw new Error(
-        `Compile Error: <${element.tag}> is not a component and doesn't support block parameters`
-      );
-    } else {
-      return helpers.op(simple ? SexpOpcodes.OpenElement : SexpOpcodes.OpenElementWithSplat, [tag]);
-    }
+  openElementWithDynamicFeatures(helpers: CompilerHelpers, { tag }: { tag: string }) {
+    return helpers.op(SexpOpcodes.OpenElementWithSplat, [tag]);
   }
 
   flushElement(helpers: CompilerHelpers) {

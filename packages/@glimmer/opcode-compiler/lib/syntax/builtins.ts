@@ -3,7 +3,8 @@ import {
   Op,
   StatementCompileActions,
   MacroBlocks,
-  MacroInlines,, Expressions
+  MacroInlines,
+  Expressions,
 } from '@glimmer/interfaces';
 import { InvokeStaticBlock, InvokeStaticBlockWithStack } from '../opcode-builder/helpers/blocks';
 import { assert, unwrap } from '@glimmer/util';

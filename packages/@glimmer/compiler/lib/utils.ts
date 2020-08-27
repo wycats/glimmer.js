@@ -45,8 +45,8 @@ const WHITELIST: Dict<string | undefined> = {
   'xmlns:xlink': XMLNS,
 };
 
-export function getAttrNamespace(attrName: string): Option<string> {
-  return WHITELIST[attrName] || null;
+export function getAttrNamespace(attrName: string): string | undefined {
+  return WHITELIST[attrName];
 }
 
 const DEFLATE_TAG_TABLE: {

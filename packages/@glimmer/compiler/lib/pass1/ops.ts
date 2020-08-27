@@ -1,28 +1,7 @@
-import { AST } from '@glimmer/syntax';
 import { ExpressionContext } from '@glimmer/interfaces';
-import { SourceOffsets } from './location';
-import { Op, UnlocatedOp } from '../shared/ops';
-
-export interface Located<T> {
-  node: T;
-  offsets: SourceOffsets | null;
-}
-
-export function located<T>(node: null, offsets: SourceOffsets | null): null;
-export function located<T>(node: T, offsets: SourceOffsets | null): Located<T>;
-export function located<T>(
-  node: T,
-  offsets: SourceOffsets | null
-): T extends null ? null : Located<T> {
-  if (node === null) {
-    return null as T extends null ? null : Located<T>;
-  } else {
-    return {
-      node,
-      offsets,
-    } as T extends null ? null : Located<T>;
-  }
-}
+import { AST } from '@glimmer/syntax';
+import { op, Op, OpsTable } from '../shared/op';
+import { SymbolTable, BlockSymbolTable, ProgramSymbolTable } from '../template-visitor';
 
 export interface AttrKind {
   // triple-curly
@@ -34,270 +13,183 @@ export interface AttrKind {
   component: boolean;
 }
 
+/** OP **/
+
+/** TEMPLATE **/
+
+export class Template extends Op<{ symbols: ProgramSymbolTable; body: Statement[] }> {
+  readonly name = 'Template';
+}
+
 /** EXPRESSIONS **/
 
-export interface Literal {
-  type: 'Literal';
-  value: AST.Literal['value'];
+// Not a string literal from a template. Used for things
+// like tag names, path parts, etc. Both SourceSlices and
+// Literals correspond to parts of the template source, but
+// literal strings look like `"..."` or `'...'` in the
+// source, while SourceSlice are a piece of another construct.
+export class SourceSlice extends op('SourceSlice').args<{ value: string }>() {
+  getString(): string {
+    return this.args.value;
+  }
 }
-
-export interface Path {
-  type: 'Path';
-  head: Pass1Expr;
-  tail: Located<string>[];
-}
-
-export interface GetArg {
-  type: 'GetArg';
-  name: string;
-}
-
-export interface GetThis {
-  type: 'ThisPath';
-}
-
-export interface GetVar {
-  type: 'VarPath';
-  name: string;
+export class Literal extends op('Literal').args<Pick<AST.Literal, 'type' | 'value'>>() {}
+export class Path extends op('Path').args<{ head: Expr; tail: SourceSlice[] }>() {}
+export class GetArg extends op('GetArg').args<{ name: SourceSlice }>() {}
+export class GetThis extends op('GetThis').void() {}
+export class GetVar extends op('GetVar').args<{
+  name: SourceSlice;
   context: ExpressionContext;
-}
+}>() {}
+export class HasBlock extends op('HasBlock').args<{ target: SourceSlice }>() {}
+export class HasBlockParams extends op('HasBlockParams').args<{ target: SourceSlice }>() {}
+export class Concat extends op('Concat').args<{ parts: [Expr, ...Expr[]] }>() {}
 
-export interface HasBlock {
-  type: 'HasBlock';
-  target: string;
-}
+export class SubExpression extends op('SubExpression').args<{
+  head: Expr;
+  params: Params;
+  hash: Hash;
+}>() {}
 
-export interface HasBlockParams {
-  type: 'HasBlockParams';
-  target: string;
-}
+export class Params extends op('Params').args<{ list: Expr[] }>() {}
+export class HashPair extends op('HashPair').args<{ key: SourceSlice; value: Expr }>() {}
+export class Hash extends op('Hash').args<{ pairs: HashPair[] }>() {}
 
-export interface Concat {
-  type: 'Concat';
-  parts: [Pass1Expr, ...Pass1Expr[]];
-}
-
-export interface SubExpression {
-  type: 'SubExpression';
-  head: Pass1Expr;
-  params: Pass1Expr<'Params'>;
-  hash: Pass1Expr<'Hash'>;
-}
-
-export interface Params {
-  type: 'Params';
-  list: Pass1Expr[];
-}
-
-export interface HashPair {
-  type: 'HashPair';
-  key: Located<string>;
-  value: Pass1Expr;
-}
-
-export interface Hash {
-  type: 'Hash';
-  pairs: Pass1Expr<'HashPair'>[];
-}
-
-export type Expression =
+export type Expr =
   | Literal
+  | Concat
   | Path
   | GetArg
   | GetThis
   | GetVar
   | HasBlock
   | HasBlockParams
-  | SubExpression;
+  | SubExpression
+  | Params
+  | Hash
+  | HashPair;
 
-export interface Pass1ExprTable {
-  Literal: Literal;
-  Concat: Concat;
-  Path: Path;
-  GetArg: GetArg;
-  GetThis: GetThis;
-  GetVar: GetVar;
-  HasBlock: HasBlock;
-  HasBlockParams: HasBlockParams;
-  SubExpression: SubExpression;
+export type ExprTable = OpsTable<Expr>;
 
-  Params: Params;
-  Hash: Hash;
-  HashPair: HashPair;
-}
+// export interface ExprTable {
+//   Literal: Literal;
+//   Concat: Concat;
+//   Path: Path;
+//   GetArg: GetArg;
+//   GetThis: GetThis;
+//   GetVar: GetVar;
+//   HasBlock: HasBlock;
+//   HasBlockParams: HasBlockParams;
+//   SubExpression: SubExpression;
 
-export type Pass1Exprs = {
-  [P in keyof Pass1ExprTable]: Op<P, Pass1ExprTable>;
-};
-
-export type Pass1Expr<P extends keyof Pass1Exprs = keyof Pass1Exprs> = Pass1Exprs[P];
+//   Params: Params;
+//   Hash: Hash;
+//   HashPair: HashPair;
+// }
 
 /** STATEMENTS **/
 
-export interface Yield {
-  type: 'Yield';
-  target: Located<string>;
-}
+// target is really a string literal, but threading that information
+// through is currently too annoying
+export class Yield extends op('Yield').args<{ target: SourceSlice }>() {}
 
-export interface Partial {
-  type: 'Partial';
-  params: Pass1Expr<'Params'>;
-}
+export class Partial extends op('Partial').args<{ params: Params }>() {}
+export class Debugger extends op('Debugger').void() {}
 
-export interface Debugger {
-  type: 'Debugger';
-}
-
-export interface InElement {
-  type: 'InElement';
-  destination?: Pass1Expr;
+export class InElement extends op('InElement').args<{
+  destination?: Expr;
   guid: string;
-  insertBefore?: Pass1Expr;
+  insertBefore?: Expr;
+}>() {}
+
+export class AppendTextNode extends op('AppendTextNode').args<{ value: Expr }>() {}
+export class AppendTrustedHTML extends op('AppendTrustedHTML').args<{ value: Expr }>() {}
+export class AppendComment extends op('AppendComment').args<{ value: SourceSlice }>() {}
+
+export class BlockInvocation extends op('BlockInvocation').args<{
+  head: Expr;
+  params: Params;
+  hash: Hash;
+  blocks: Block[];
+}>() {}
+
+export function getBlock(blocks: Block[], name: string): Block | undefined {
+  return blocks.find(block => block.name === name);
 }
 
-export interface AppendTextNode {
-  type: 'AppendTextNode';
-  value: Pass1Expr;
-}
-
-export interface AppendTrustedHTML {
-  type: 'AppendTrustedHTML';
-  value: Pass1Expr;
-}
-
-export interface AppendComment {
-  type: 'AppendComment';
-  value: Located<string>;
-}
-
-export interface BlockInvocation {
-  type: 'BlockInvocation';
-  head: Pass1Expr;
-  params: Pass1Expr<'Params'>;
-  hash: Pass1Expr<'Hash'>;
-  blocks: Pass1Statement<'Block'>[];
-}
-
-export interface Block {
-  type: 'Block';
-  name: Located<string>;
-  symbols: AST.BlockSymbols | undefined;
-  body: Pass1Statement[];
-}
+export class Block extends op('Block').args<{
+  name: SourceSlice;
+  symbols: BlockSymbolTable;
+  body: Statement[];
+}>() {}
 
 // TODO: Make Component have the same structure as BlockInvocation, and
 // make named blocks just normal blocks in the invocation
-export interface OpenNamedBlock {
-  type: 'OpenNamedBlock';
-  tag: Located<string>;
-  symbols: AST.BlockSymbols | undefined;
-}
+export class OpenNamedBlock extends op('OpenNamedBlock').args<{
+  tag: SourceSlice;
+  symbols: BlockSymbolTable;
+}>() {}
 
-export interface OpenComponent {
-  type: 'OpenComponent';
-  tag: Pass1Expr;
+export class OpenComponent extends op('OpenComponent').args<{
+  tag: Expr;
+  symbols: BlockSymbolTable;
   selfClosing: boolean;
-  symbols: AST.BlockSymbols | undefined;
-}
+}>() {}
 
-export interface OpenSimpleElement {
-  type: 'OpenSimpleElement';
-  tag: Located<string>;
-}
+export class OpenSimpleElement extends op('OpenSimpleElement').args<{
+  tag: SourceSlice;
+}>() {}
 
-export interface OpenElementWithDynamicFeatures {
-  type: 'OpenElementWithDynamicFeatures';
-  tag: Located<string>;
-}
+export class OpenElementWithDynamicFeatures extends op('OpenElementWithDynamicFeatures').args<{
+  tag: SourceSlice;
+}>() {}
 
-export interface FlushElement {
-  type: 'FlushElement';
-}
+export class FlushElement extends op('FlushElement').args<{ symbols: BlockSymbolTable }>() {}
+export class CloseNamedBlock extends op('CloseNamedBlock').void() {}
+export class CloseDynamicComponent extends op('CloseDynamicComponent').void() {}
+export class CloseComponent extends op('CloseComponent').void() {}
+export class CloseElement extends op('CloseElement').void() {}
+export class CloseElementBlock extends op('CloseElementBlock').void() {}
 
-export interface CloseNamedBlock {
-  type: 'CloseNamedBlock';
-}
-
-export interface CloseDynamicComponent {
-  type: 'CloseDynamicComponent';
-}
-
-export interface CloseComponent {
-  type: 'CloseComponent';
-}
-
-export interface CloseElement {
-  type: 'CloseElement';
-}
-
-export interface Arg {
-  type: 'Arg';
-  name: Located<string>;
-  value: Pass1Expr;
-}
-
-export interface AttrSplat {
-  type: 'AttrSplat';
-}
-
-export interface Attr {
-  type: 'Attr';
+export class Arg extends op('Arg').args<{ name: SourceSlice; value: Expr }>() {}
+export class AttrSplat extends op('AttrSplat').void() {}
+export class Attr extends op('Attr').args<{
   kind: AttrKind;
-  name: Located<string>;
-  value: Pass1Expr;
+  name: SourceSlice;
+  value: Expr;
   namespace?: string;
-}
+}>() {}
 
-export interface Modifier {
-  type: 'Modifier';
-  head: Pass1Expr;
-  params: Pass1Expr<'Params'>;
-  hash: Pass1Expr<'Hash'>;
-}
+export class Modifier extends op('Modifier').args<{ head: Expr; params: Params; hash: Hash }>() {}
 
-export interface Pass1StatementTable {
-  Yield: Yield;
-  Partial: Partial;
-  Debugger: Debugger;
-  InElement: InElement;
+export type Statement =
+  | Yield
+  | Debugger
+  | InElement
+  | Partial
+  | BlockInvocation
+  | Block
+  | AppendTextNode
+  | AppendTrustedHTML
+  | AppendComment
+  | OpenNamedBlock
+  | OpenComponent
+  | OpenSimpleElement
+  | OpenElementWithDynamicFeatures
+  | FlushElement
+  | CloseNamedBlock
+  | CloseDynamicComponent
+  | CloseComponent
+  | CloseElement
+  | CloseElementBlock
+  | Arg
+  | AttrSplat
+  | Attr
+  | Modifier;
 
-  BlockInvocation: BlockInvocation;
-  Block: Block;
+export type StatementTable = OpsTable<Statement>;
 
-  AppendTextNode: AppendTextNode;
-  AppendTrustedHTML: AppendTrustedHTML;
-  AppendComment: AppendComment;
+// export type Statement<P extends keyof Statements = keyof Statements> = Statements[P];
 
-  OpenNamedBlock: OpenNamedBlock;
-  OpenComponent: OpenComponent;
-  OpenSimpleElement: OpenSimpleElement;
-  OpenElementWithDynamicFeatures: OpenElementWithDynamicFeatures;
-
-  FlushElement: FlushElement;
-
-  CloseNamedBlock: CloseNamedBlock;
-  CloseDynamicComponent: CloseDynamicComponent;
-  CloseComponent: CloseComponent;
-  CloseElement: CloseElement;
-
-  Arg: Arg;
-  AttrSplat: AttrSplat;
-  Attr: Attr;
-  Modifier: Modifier;
-}
-
-export type Pass1Statements = {
-  [P in keyof Pass1StatementTable]: Op<P, Pass1StatementTable>;
-};
-
-export type Pass1Statement<
-  P extends keyof Pass1Statements = keyof Pass1Statements
-> = Pass1Statements[P];
-
-export type UnlocatedPass1Statements = {
-  [P in keyof Pass1StatementTable]: UnlocatedOp<P, Pass1StatementTable>;
-};
-
-export type UnlocatedPass1Statement<
-  P extends keyof Pass1Statements = keyof Pass1Statements
-> = UnlocatedPass1Statements[P];
+export type AnyOpTable = StatementTable & ExprTable;
+export type AnyOp = Statement | Expr;

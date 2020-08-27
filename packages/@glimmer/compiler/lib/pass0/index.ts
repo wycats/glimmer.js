@@ -1,10 +1,10 @@
 import { ExpressionContext } from '@glimmer/interfaces';
 import { AST, SyntaxError } from '@glimmer/syntax';
 import { assertNever } from '@glimmer/util';
-import { located, Pass1Expr, Pass1Statement } from '../pass1/ops';
+import * as pass1 from '../pass1/ops';
 import { ProgramSymbolTable } from '../template-visitor';
 import { getAttrNamespace } from '../utils';
-import { Context } from './context';
+import { Context, offsetsForHashKey, paramsOffsets } from './context';
 import { EXPRESSIONS } from './expressions';
 import {
   assertIsSimpleHelper,
@@ -14,10 +14,9 @@ import {
   isSimplePath,
 } from './is-node';
 import { HAS_BLOCK, HAS_BLOCK_PARAMS } from './keywords';
-import { offsetsForHashKey, paramsOffsets } from './location';
 import { STATEMENTS } from './statements';
 
-export function visit(source: string, root: AST.Template): Pass1Statement[] {
+export function visit(source: string, root: AST.Template): pass1.Statement[] {
   let ctx = new Context(source, {
     expressions: EXPRESSIONS,
     statements: STATEMENTS,
@@ -43,11 +42,11 @@ export class CompilerHelper {
     this.ctx = context;
   }
 
-  visitExpr(node: AST.Expression, context: ExpressionContext): Pass1Expr {
+  visitExpr(node: AST.Expression, context: ExpressionContext): pass1.Expr {
     return this.ctx.visitExpr(node, context);
   }
 
-  visitStmt<T extends AST.Statement>(node: T): Pass1Statement[] {
+  visitStmt<T extends AST.Statement>(node: T): pass1.Statement[] {
     return this.ctx.visitStmt(node);
   }
 
@@ -55,7 +54,7 @@ export class CompilerHelper {
     attr: AST.AttrNode,
     hasComponentFeatures: boolean,
     elementNode: AST.ElementNode
-  ): Pass1Statement[] {
+  ): pass1.Statement[] {
     assertValidArgumentName(attr, hasComponentFeatures, elementNode);
 
     let name = attr.name;
@@ -64,7 +63,9 @@ export class CompilerHelper {
 
     if (name[0] === '@') {
       // Arg
-      return this.ctx.ops(this.ctx.op('Arg', { name: located(name, null), value }).loc(attr));
+      return this.ctx.ops(
+        this.ctx.op(pass1.Arg, { name: this.ctx.slice(name).offsets(null), value }).loc(attr)
+      );
     }
 
     // Attr
@@ -72,13 +73,13 @@ export class CompilerHelper {
 
     // splattributes
     if (name === '...attributes') {
-      return this.ctx.ops(this.ctx.op('AttrSplat').loc(attr));
+      return this.ctx.ops(this.ctx.op(pass1.AttrSplat).loc(attr));
     }
 
     return this.ctx.ops(
       this.ctx
-        .op('Attr', {
-          name: located(name, null),
+        .op(pass1.Attr, {
+          name: this.ctx.slice(name).offsets(null),
           value,
           namespace,
           kind: {
@@ -90,10 +91,10 @@ export class CompilerHelper {
     );
   }
 
-  modifier(modifier: AST.ElementModifierStatement): Pass1Statement[] {
+  modifier(modifier: AST.ElementModifierStatement): pass1.Statement[] {
     return this.ctx.ops(
       this.ctx
-        .op('Modifier', {
+        .op(pass1.Modifier, {
           head: this.visitExpr(modifier.path, ExpressionContext.ModifierHead),
           params: this.params({ path: modifier.path, params: modifier.params }),
           hash: this.hash(modifier.hash),
@@ -110,25 +111,19 @@ export class CompilerHelper {
     path: AST.Expression;
     params: AST.Expression[];
     hash: AST.Hash;
-  }): { params: Pass1Expr<'Params'>; hash: Pass1Expr<'Hash'> } {
+  }): { params: pass1.Params; hash: pass1.Hash } {
     return { params: this.params({ path, params }), hash: this.hash(hash) };
   }
 
-  params({
-    path,
-    params: list,
-  }: {
-    path: AST.Expression;
-    params: AST.Expression[];
-  }): Pass1Expr<'Params'> {
+  params({ path, params: list }: { path: AST.Expression; params: AST.Expression[] }): pass1.Params {
     let offsets = paramsOffsets({ path, params: list }, this.ctx.source);
 
     if (!isPresent(list)) {
-      return this.ctx.expr('Params', { list: [] }).offsets(offsets);
+      return this.ctx.expr(pass1.Params, { list: [] }).offsets(offsets);
     }
 
     return this.ctx
-      .expr('Params', {
+      .expr(pass1.Params, {
         list: this.ctx.mapIntoExprs(list, expr => [
           this.visitExpr(expr, ExpressionContext.Expression),
         ]),
@@ -136,38 +131,43 @@ export class CompilerHelper {
       .offsets(offsets);
   }
 
-  hash(hash: AST.Hash): Pass1Expr<'Hash'> {
+  hash(hash: AST.Hash): pass1.Hash {
     let pairs = hash.pairs;
 
     if (!isPresent(pairs)) {
-      return this.ctx.expr('Hash', { pairs: [] }).loc(hash);
+      return this.ctx.expr(pass1.Hash, { pairs: [] }).loc(hash);
     }
 
-    let mappedPairs = this.ctx.mapIntoExprs<'HashPair', AST.HashPair>(pairs, pair => [
+    let mappedPairs = this.ctx.mapIntoExprs<pass1.HashPair, AST.HashPair>(pairs, pair => [
       this.ctx
-        .expr('HashPair', {
-          key: located(pair.key, offsetsForHashKey(pair, this.ctx.source)),
+        .expr(pass1.HashPair, {
+          key: this.ctx.slice(pair.key).offsets(offsetsForHashKey(pair, this.ctx.source)),
           value: this.visitExpr(pair.value, ExpressionContext.Expression),
         })
         .loc(pair),
     ]);
 
-    return this.ctx.expr('Hash', { pairs: mappedPairs }).loc(hash);
+    return this.ctx.expr(pass1.Hash, { pairs: mappedPairs }).loc(hash);
   }
 
-  concat(concat: AST.ConcatStatement): Pass1Expr {
+  concat(concat: AST.ConcatStatement): pass1.Expr {
     let exprs = this.ctx.mapIntoExprs(assertPresent([...concat.parts].reverse()), part => [
       this.attrValue(part).expr,
     ]);
-    return this.ctx.expr('Concat', { parts: exprs }).loc(concat);
+    return this.ctx.expr(pass1.Concat, { parts: exprs }).loc(concat);
   }
 
   simpleAttrValue(
     value: AST.TextNode | AST.MustacheStatement
-  ): { expr: Pass1Expr; isStatic: boolean } {
+  ): { expr: pass1.Expr; isStatic: boolean } {
     // returns the static value if the value is static
     if (value.type === 'TextNode') {
-      return { expr: this.ctx.expr('Literal', { value: value.chars }).loc(value), isStatic: true };
+      return {
+        expr: this.ctx
+          .expr(pass1.Literal, { type: 'StringLiteral', value: value.chars })
+          .loc(value),
+        isStatic: true,
+      };
     }
 
     if (isKeywordCall(value)) {
@@ -179,7 +179,7 @@ export class CompilerHelper {
 
       return {
         expr: this.ctx
-          .expr('SubExpression', {
+          .expr(pass1.SubExpression, {
             head: this.ctx.visitExpr(value.path, ExpressionContext.CallHead),
             ...this.args(value),
           })
@@ -202,7 +202,7 @@ export class CompilerHelper {
 
   attrValue(
     value: AST.TextNode | AST.MustacheStatement | AST.ConcatStatement
-  ): { expr: Pass1Expr; isStatic: boolean } {
+  ): { expr: pass1.Expr; isStatic: boolean } {
     if (value.type === 'ConcatStatement') {
       return {
         expr: this.concat(value),
@@ -213,7 +213,7 @@ export class CompilerHelper {
     return this.simpleAttrValue(value);
   }
 
-  keyword(call: IsKeywordCall): Pass1Expr {
+  keyword(call: IsKeywordCall): pass1.Expr {
     if (HAS_BLOCK.match(call)) {
       return HAS_BLOCK.translate(call, this.ctx);
     } else if (HAS_BLOCK_PARAMS.match(call)) {
@@ -223,7 +223,7 @@ export class CompilerHelper {
     }
   }
 
-  pathWithContext(path: AST.PathExpression, context: ExpressionContext): Pass1Expr {
+  pathWithContext(path: AST.PathExpression, context: ExpressionContext): pass1.Expr {
     let { parts } = path;
     if (path.data) {
       return this.argPath(`@${parts[0]}`, parts.slice(1), path);
@@ -234,24 +234,41 @@ export class CompilerHelper {
     }
   }
 
-  path(head: Pass1Expr, tail: string[], node: AST.BaseNode): Pass1Expr {
+  path(head: pass1.Expr, tail: string[], node: AST.BaseNode): pass1.Expr {
     if (tail.length === 0) {
       return head;
     } else {
-      return this.ctx.expr('Path', { head, tail: tail.map(e => located(e, null)) }).loc(node);
+      return this.ctx
+        .expr(pass1.Path, { head, tail: tail.map(e => this.ctx.slice(e).offsets(null)) })
+        .loc(node);
     }
   }
 
-  argPath(head: string, tail: string[], node: AST.BaseNode): Pass1Expr {
-    return this.path(this.ctx.expr('GetArg', { name: head }).offsets(null), tail, node);
+  argPath(head: string, tail: string[], node: AST.BaseNode): pass1.Expr {
+    return this.path(
+      this.ctx.expr(pass1.GetArg, { name: this.ctx.slice(head).offsets(null) }).offsets(null),
+      tail,
+      node
+    );
   }
 
-  varPath(head: string, tail: string[], node: AST.BaseNode, context: ExpressionContext): Pass1Expr {
-    return this.path(this.ctx.expr('GetVar', { name: head, context }).offsets(null), tail, node);
+  varPath(
+    head: string,
+    tail: string[],
+    node: AST.BaseNode,
+    context: ExpressionContext
+  ): pass1.Expr {
+    return this.path(
+      this.ctx
+        .expr(pass1.GetVar, { name: this.ctx.slice(head).offsets(null), context })
+        .offsets(null),
+      tail,
+      node
+    );
   }
 
-  thisPath(tail: string[], node: AST.BaseNode): Pass1Expr {
-    return this.path(this.ctx.expr('GetThis').offsets(null), tail, node);
+  thisPath(tail: string[], node: AST.BaseNode): pass1.Expr {
+    return this.path(this.ctx.expr(pass1.GetThis).offsets(null), tail, node);
   }
 }
 

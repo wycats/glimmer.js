@@ -13,8 +13,8 @@ type Visitor = {
 };
 
 class Pass2Visitor implements Visitor {
-  startProgram(ctx: CompilerContext, template: AST.Template): void {
-    ctx.push(template.symbols);
+  startProgram(ctx: CompilerContext, symbols: AST.ProgramSymbols): void {
+    ctx.push(symbols);
   }
 
   startBlock(ctx: CompilerContext, op: AST.Block): void {

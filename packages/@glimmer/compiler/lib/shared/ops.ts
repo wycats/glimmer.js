@@ -1,32 +1,23 @@
 import { SourceLocation, SourcePosition } from '@glimmer/syntax';
 import { positionToOffset } from '../location';
-import { SourceOffsets } from '../pass1/location';
+import { SourceOffsets } from './location';
+import { InputOpArgs, Op, OpConstructor, toArgs, UnlocatedOp } from './op';
 
 export type ArgsMap<K extends string | number> = {
   [P in K]: unknown;
 };
 
-export type Ops<K extends string | number, Map extends ArgsMap<K>> =
-  | OpImpl<K, Map>
-  | OpImpl<K, Map>[];
+export type Ops<O extends Op> = O | O[];
 
-export type AllUnlocatedOps<K extends string, Map extends ArgsMap<K>> = K extends string
-  ? UnlocatedOpImpl<K, Map>
-  : never;
-
-export type AllOps<K extends string, Map extends ArgsMap<K>> = K extends string
-  ? OpImpl<K, Map>
-  : never;
-
-export class OpFactory<K extends string | number, Map extends ArgsMap<K>> {
+export class OpFactory<SubOp extends Op> {
   constructor(private source: string) {}
 
-  op<N extends K>(name: N, args: Map[N]): UnlocatedOp<K, Map> {
-    return new UnlocatedOpImpl<N, Map>(name, args, this.source);
+  op<O extends SubOp>(Class: OpConstructor<O>, ...args: InputOpArgs<O>): UnlocatedOp<O> {
+    return new UnlocatedOp(Class, toArgs(args), this.source);
   }
 
-  ops(...ops: Ops<K, Map>[]): Op<K, Map>[] {
-    let out: OpImpl<K, Map>[] = [];
+  ops<O extends Op>(...ops: Ops<O>[]): O[] {
+    let out: O[] = [];
 
     for (let op of ops) {
       if (Array.isArray(op)) {
@@ -39,8 +30,8 @@ export class OpFactory<K extends string | number, Map extends ArgsMap<K>> {
     return out;
   }
 
-  map<T, N extends K>(input: T[], callback: (input: T) => Op<N, Map>[]): Op<K, Map>[] {
-    let out = [];
+  map<T, O extends Op>(input: T[], callback: (input: T) => O[]): O[] {
+    let out: O[] = [];
 
     for (let v of input) {
       out.push(...callback(v));
@@ -58,8 +49,8 @@ export function range(
   last: SourcePosition,
   source: string
 ): SourceOffsets | null {
-  let start = positionToOffset(source, first.line, first.column);
-  let end = positionToOffset(source, last.line, last.column);
+  let start = positionToOffset(source, { line: first.line, column: first.column });
+  let end = positionToOffset(source, { line: last.line, column: last.column });
 
   if (start === null || end === null) {
     return null;
@@ -68,65 +59,6 @@ export function range(
   }
 }
 
-export type UnlocatedOp<K extends string | number, Map extends ArgsMap<K>, N extends K = K> = {
-  [P in K]: UnlocatedOpImpl<P, Map>;
-}[N];
-
-export class UnlocatedOpImpl<K extends string | number, Map extends ArgsMap<K>> {
-  constructor(readonly name: K, readonly args: Map[K], private source: string) {}
-
-  loc(
-    location:
-      | SourceLocation
-      | LocatedWithPositions
-      | [LocatedWithPositions, ...LocatedWithPositions[]]
-  ): OpImpl<K, Map> {
-    if (Array.isArray(location)) {
-      let first = location[0];
-      let last = location[location.length - 1];
-
-      return new OpImpl(this.name, this.args, range(first.loc.start, last.loc.end, this.source));
-    } else {
-      let loc = 'loc' in location ? location.loc : location;
-      return new OpImpl(this.name, this.args, range(loc.start, loc.end, this.source));
-    }
-  }
-
-  offsets(
-    location:
-      | SourceOffsets
-      | LocatedWithOffsets
-      | [LocatedWithOffsets, ...LocatedWithOffsets[]]
-      | null
-  ): OpImpl<K, Map> {
-    if (location !== null) {
-      if ('offsets' in location) {
-        return new OpImpl(this.name, this.args, location.offsets);
-      } else if (Array.isArray(location)) {
-        let start = location[0];
-        let end = location[location.length - 1];
-
-        let startOffset = start.offsets.start;
-        let endOffset = end.offsets.end;
-
-        return new OpImpl(this.name, this.args, { start: startOffset, end: endOffset });
-      } else {
-        return new OpImpl(this.name, this.args, location);
-      }
-    } else {
-      return new OpImpl(this.name, this.args, null);
-    }
-  }
-}
-
 export type ArrayUnion<K extends string | number, Map extends ArgsMap<K>, Name extends K = K> = {
   [P in K]: [P, Map[P]];
 }[Name];
-
-export type Op<K extends string | number, Map extends ArgsMap<K>, Name extends K = K> = {
-  [P in K]: OpImpl<P, Map>;
-}[Name];
-
-export class OpImpl<K extends string | number, Map extends ArgsMap<K>> {
-  constructor(readonly name: K, readonly args: Map[K], readonly offsets: SourceOffsets | null) {}
-}

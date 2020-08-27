@@ -1,7 +1,7 @@
 import { AST, builders, SyntaxError } from '@glimmer/syntax';
 import { ExpressionContext } from '../../../interfaces';
-import { located, Pass1Expr, Pass1Statement } from '../pass1/ops';
-import { Context } from './context';
+import * as pass1 from '../pass1/ops';
+import { Context, ImmutableContext } from './context';
 import { HelperBlock, HelperExpression, HelperStatement, isPresent } from './is-node';
 
 interface KeywordPathNode<K extends string> extends AST.PathExpression {
@@ -13,7 +13,7 @@ interface KeywordStatementNode<K extends string> extends HelperStatement {
 }
 
 interface KeywordDelegate<N extends AST.BaseNode, V, Out> {
-  assert(node: N): V;
+  assert(node: N, ctx: ImmutableContext): V;
   translate(node: N, ctx: Context, param: V): Out;
 }
 
@@ -24,7 +24,7 @@ interface KeywordBlockNode<K extends string> extends HelperBlock {
 class KeywordBlock<K extends string, V> {
   constructor(
     private keyword: K,
-    private delegate: KeywordDelegate<KeywordBlockNode<K>, V, Pass1Statement>
+    private delegate: KeywordDelegate<KeywordBlockNode<K>, V, pass1.Statement>
   ) {}
 
   match(mustache: AST.BlockStatement): mustache is KeywordBlockNode<K> {
@@ -35,8 +35,8 @@ class KeywordBlock<K extends string, V> {
     }
   }
 
-  translate(mustache: KeywordBlockNode<K>, ctx: Context): Pass1Statement {
-    let param = this.delegate.assert(mustache);
+  translate(mustache: KeywordBlockNode<K>, ctx: Context): pass1.Statement {
+    let param = this.delegate.assert(mustache, ctx);
     return this.delegate.translate(mustache, ctx, param);
   }
 }
@@ -44,15 +44,15 @@ class KeywordBlock<K extends string, V> {
 class KeywordStatement<K extends string, V> {
   constructor(
     private keyword: K,
-    private delegate: KeywordDelegate<KeywordStatementNode<K>, V, Pass1Statement>
+    private delegate: KeywordDelegate<KeywordStatementNode<K>, V, pass1.Statement>
   ) {}
 
   match(mustache: HelperStatement): mustache is KeywordStatementNode<K> {
     return mustache.path.original === this.keyword;
   }
 
-  translate(mustache: KeywordStatementNode<K>, ctx: Context): Pass1Statement {
-    let param = this.delegate.assert(mustache);
+  translate(mustache: KeywordStatementNode<K>, ctx: Context): pass1.Statement {
+    let param = this.delegate.assert(mustache, ctx);
     return this.delegate.translate(mustache, ctx, param);
   }
 }
@@ -64,15 +64,15 @@ export interface KeywordExpressionNode<K extends string> extends HelperExpressio
 class KeywordExpression<K extends string, V> {
   constructor(
     private keyword: K,
-    private delegate: KeywordDelegate<KeywordExpressionNode<K>, V, Pass1Expr>
+    private delegate: KeywordDelegate<KeywordExpressionNode<K>, V, pass1.Expr>
   ) {}
 
   match(mustache: HelperExpression): mustache is KeywordExpressionNode<K> {
     return mustache.path.original === this.keyword;
   }
 
-  translate(mustache: KeywordExpressionNode<K>, ctx: Context): Pass1Expr {
-    let param = this.delegate.assert(mustache);
+  translate(mustache: KeywordExpressionNode<K>, ctx: Context): pass1.Expr {
+    let param = this.delegate.assert(mustache, ctx);
     return this.delegate.translate(mustache, ctx, param);
   }
 }
@@ -112,11 +112,11 @@ export const IN_ELEMENT = new KeywordBlock('in-element', {
     block: KeywordBlockNode<'in-element'>,
     ctx: Context,
     { insertBefore, destination }: { insertBefore?: AST.Expression; destination?: AST.Expression }
-  ): Pass1Statement {
+  ): pass1.Statement {
     let guid = ctx.cursor();
 
     return ctx
-      .op('InElement', {
+      .op(pass1.InElement, {
         insertBefore: insertBefore
           ? ctx.visitExpr(insertBefore, ExpressionContext.Expression)
           : undefined,
@@ -130,7 +130,7 @@ export const IN_ELEMENT = new KeywordBlock('in-element', {
 });
 
 export const YIELD = new KeywordStatement('yield', {
-  assert(statement: KeywordStatementNode<'yield'>): string {
+  assert(statement: KeywordStatementNode<'yield'>): { target: AST.StringLiteral } {
     let { pairs } = statement.hash;
 
     if (isPresent(pairs)) {
@@ -146,18 +146,18 @@ export const YIELD = new KeywordStatement('yield', {
         throw new SyntaxError(`you can only yield to a literal value`, target.loc);
       }
 
-      return target.value;
+      return { target };
     } else {
-      return 'default';
+      return { target: builders.string('default') };
     }
   },
 
   translate(
     statement: KeywordStatementNode<'yield'>,
     ctx: Context,
-    target: string
-  ): Pass1Statement {
-    return ctx.op('Yield', { target: located(target, null) }).loc(statement);
+    { target }: { target: AST.StringLiteral }
+  ): pass1.Statement {
+    return ctx.op(pass1.Yield, { target: ctx.slice(target.value).loc(target) }).loc(statement);
   },
 });
 
@@ -192,8 +192,8 @@ export const PARTIAL = new KeywordStatement('partial', {
     }
   },
 
-  translate(statement: KeywordStatementNode<'partial'>, ctx: Context): Pass1Statement {
-    return ctx.op('Partial', { params: ctx.helper.params(statement) }).loc(statement);
+  translate(statement: KeywordStatementNode<'partial'>, ctx: Context): pass1.Statement {
+    return ctx.op(pass1.Partial, { params: ctx.helper.params(statement) }).loc(statement);
   },
 });
 
@@ -213,34 +213,45 @@ export const DEBUGGER = new KeywordStatement('debugger', {
     }
   },
 
-  translate(statement: KeywordStatementNode<'debugger'>, ctx: Context): Pass1Statement {
-    return ctx.op('Debugger').loc(statement);
+  translate(statement: KeywordStatementNode<'debugger'>, ctx: Context): pass1.Statement {
+    return ctx.op(pass1.Debugger).loc(statement);
   },
 });
 
 export const HAS_BLOCK = new KeywordExpression('has-block', {
-  assert(node: KeywordExpressionNode<'has-block'>): string {
-    return assertValidHasBlockUsage('has-block', node);
+  assert(node: KeywordExpressionNode<'has-block'>, ctx: Context): pass1.SourceSlice {
+    return assertValidHasBlockUsage('has-block', node, ctx);
   },
-  translate(node: KeywordExpressionNode<'has-block'>, ctx: Context, target: string): Pass1Expr {
-    return ctx.expr('HasBlock', { target }).loc(node);
+  translate(
+    node: KeywordExpressionNode<'has-block'>,
+    ctx: Context,
+    target: pass1.SourceSlice
+  ): pass1.Expr {
+    return ctx.expr(pass1.HasBlock, { target }).loc(node);
   },
 });
 
 export const HAS_BLOCK_PARAMS = new KeywordExpression('has-block-params', {
-  assert(node: KeywordExpressionNode<'has-block-params'>): string {
-    return assertValidHasBlockUsage('has-block-params', node);
+  assert(
+    node: KeywordExpressionNode<'has-block-params'>,
+    ctx: ImmutableContext
+  ): pass1.SourceSlice {
+    return assertValidHasBlockUsage('has-block-params', node, ctx);
   },
   translate(
     node: KeywordExpressionNode<'has-block-params'>,
     ctx: Context,
-    target: string
-  ): Pass1Expr {
-    return ctx.expr('HasBlockParams', { target }).loc(node);
+    target: pass1.SourceSlice
+  ): pass1.Expr {
+    return ctx.expr(pass1.HasBlockParams, { target }).loc(node);
   },
 });
 
-export function assertValidHasBlockUsage(type: string, call: AST.Call): string {
+export function assertValidHasBlockUsage(
+  type: string,
+  call: AST.Call,
+  ctx: ImmutableContext
+): pass1.SourceSlice {
   let { params, hash, loc } = call;
 
   if (hash && hash.pairs.length > 0) {
@@ -248,11 +259,11 @@ export function assertValidHasBlockUsage(type: string, call: AST.Call): string {
   }
 
   if (params.length === 0) {
-    return 'default';
+    return ctx.slice('default').offsets(null);
   } else if (params.length === 1) {
     let param = params[0];
     if (param.type === 'StringLiteral') {
-      return param.value;
+      return ctx.slice(param.value).offsets(null);
     } else {
       throw new SyntaxError(
         `you can only yield to a literal value (on line ${loc.start.line})`,

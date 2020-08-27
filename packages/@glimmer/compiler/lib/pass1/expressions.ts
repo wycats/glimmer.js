@@ -1,38 +1,115 @@
-import { ExpressionContext } from '@glimmer/interfaces';
-import { AST } from '@glimmer/syntax';
-import { Pass2Op } from '../pass2/ops';
+import * as pass2 from '../pass2/ops';
+import * as pass1 from '../pass1/ops';
+import { OpArgs } from '../shared/op';
 import { Context, Pass1Visitor } from './context';
+import { SourceOffsets } from '../shared/location';
 
-export const HirExpressions: Pass1Visitor['expressions'] = {
-  PathExpression(path: AST.PathExpression, ctx: Context): Pass2Op[] {
-    return ctx.helper.pathWithContext(path, ExpressionContext.Expression);
-  },
+type Pass1ExpressionsVisitor = Pass1Visitor['expressions'];
 
-  StringLiteral(literal: AST.StringLiteral, ctx: Context): Pass2Op {
-    return ctx.op('literal', literal.value).loc(literal);
-  },
+class Pass1Expressions implements Pass1ExpressionsVisitor {
+  GetArg({ name }: OpArgs<pass1.GetArg>, ctx: Context): pass2.Op {
+    return ctx.op(pass2.GetSymbol, { symbol: ctx.table.allocateNamed(name.getString()) });
+  }
 
-  BooleanLiteral(literal: AST.BooleanLiteral, ctx: Context): Pass2Op {
-    return ctx.op('literal', literal.value).loc(literal);
-  },
+  GetThis(_: OpArgs<pass1.GetThis>, ctx: Context): pass2.Op {
+    return ctx.op(pass2.GetSymbol, { symbol: 0 });
+  }
 
-  NumberLiteral(literal: AST.NumberLiteral, ctx: Context): Pass2Op {
-    return ctx.op('literal', literal.value).loc(literal);
-  },
+  GetVar({ name, context }: OpArgs<pass1.GetVar>, ctx: Context): pass2.Op {
+    if (ctx.table.has(name.getString())) {
+      let symbol = ctx.table.get(name.getString());
+      return ctx.op(pass2.GetSymbol, { symbol });
+    } else {
+      // this will be different in strict mode
+      let symbol = ctx.table.allocateFree(name.getString());
+      return ctx.op(pass2.GetFreeWithContext, { symbol, context });
+    }
+  }
 
-  NullLiteral(literal: AST.NullLiteral, ctx: Context): Pass2Op {
-    return ctx.op('literal', literal.value).loc(literal);
-  },
+  HasBlock({ target }: OpArgs<pass1.HasBlock>, ctx: Context): pass2.Op {
+    return ctx.op(pass2.HasBlock, { symbol: ctx.table.allocateBlock(target.getString()) });
+  }
 
-  UndefinedLiteral(literal: AST.UndefinedLiteral, ctx: Context): Pass2Op {
-    return ctx.op('literal', literal.value).loc(literal);
-  },
+  HasBlockParams({ target }: OpArgs<pass1.HasBlockParams>, ctx: Context): pass2.Op {
+    return ctx.op(pass2.HasBlockParams, { symbol: ctx.table.allocateBlock(target.getString()) });
+  }
 
-  ConcatStatement(concat: AST.ConcatStatement, ctx: Context): Pass2Op[] {
-    return ctx.helper.concat(concat);
-  },
+  Concat({ parts }: OpArgs<pass1.Concat>, ctx: Context): pass2.Op[] {
+    return ctx.ops(
+      ctx.map([...parts].reverse(), part => ctx.visitExpr(part)),
+      ctx.op(pass2.PrepareArray, { entries: parts.length })
+    );
+  }
 
-  SubExpression(expr: AST.SubExpression, ctx: Context): Pass2Op[] {
-    return ctx.helper.sexp(expr);
-  },
-};
+  Path({ head, tail }: OpArgs<pass1.Path>, ctx: Context): pass2.Op[] {
+    let headOps = ctx.visitExpr(head);
+
+    // let tailParts = tail.map(slice => slice.getString());
+
+    if (tail.length === 0) {
+      return headOps;
+    } else {
+      return ctx.ops(
+        headOps,
+        ctx
+          .unlocatedOp(
+            pass2.GetPath,
+            tail.map(p => p.getString())
+          )
+          .offsets(range(tail))
+      );
+    }
+  }
+
+  Params({ list }: OpArgs<pass1.Params>, ctx: Context): pass2.Op[] {
+    return ctx.ops(
+      ctx.map([...list].reverse(), expr => ctx.visitExpr(expr)),
+      ctx.op(pass2.PrepareObject, { entries: list.length })
+    );
+  }
+
+  Hash({ pairs }: OpArgs<pass1.Hash>, ctx: Context): pass2.Op[] {
+    if (pairs.length === 0) {
+      return [ctx.op(pass2.Literal, { type: 'NullLiteral', value: null })];
+    }
+
+    return ctx.ops(
+      ctx.map([...pairs].reverse(), pair => ctx.visitExpr(pair)),
+      ctx.op(pass2.PrepareObject, { entries: pairs.length })
+    );
+  }
+
+  HashPair({ key, value }: OpArgs<pass1.HashPair>, ctx: Context): pass2.Op[] {
+    return ctx.ops(
+      ctx.visitExpr(value),
+      ctx
+        .unlocatedOp(pass2.Literal, { type: 'StringLiteral', value: key.name })
+        .offsets(key.offsets)
+    );
+  }
+
+  Literal({ type, value }: OpArgs<pass1.Literal>, ctx: Context): pass2.Op {
+    return ctx.op(pass2.Literal, { type, value });
+  }
+
+  SubExpression({ head, params, hash }: OpArgs<pass1.SubExpression>, ctx: Context): pass2.Op[] {
+    return ctx.ops(ctx.helper.args({ params, hash }), ctx.visitExpr(head), ctx.op(pass2.Helper));
+  }
+}
+
+function range(list: { offsets: SourceOffsets | null }[]): SourceOffsets | null {
+  if (list.length === 0) {
+    return null;
+  } else {
+    let first = list[0];
+    let last = list[list.length - 1];
+
+    if (first.offsets === null || last.offsets === null) {
+      return null;
+    } else {
+      return { start: first.offsets.start, end: last.offsets.end };
+    }
+  }
+}
+
+export const EXPRESSIONS = new Pass1Expressions();

@@ -185,9 +185,9 @@ export const IN_ELEMENT = new KeywordBlock('in-element', {
         params: block.params,
         hash: builders.hash(pairs, block.hash.loc),
       }),
-      ctx.expr(block.path, ExpressionContext.BlockHead),
-      ctx.stmt(block.inverse || null),
-      ctx.stmt(block.program),
+      ctx.visitExpr(block.path, ExpressionContext.BlockHead),
+      ctx.visitStmt(block.inverse || null),
+      ctx.visitStmt(block.program),
       ctx.op('block', !!block.inverse).loc(block)
     );
   },

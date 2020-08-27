@@ -1,25 +1,28 @@
 import type { AST } from '@glimmer/syntax';
 import type { ExpressionContext, Option, WireFormat } from '@glimmer/interfaces';
 import { Op, OpImpl } from '../shared/ops';
+import { OpenBlockComponent, OpenBlockElement, OpenElement } from '../pass2/ops';
 
 export interface Pass3OpsTable {
   startProgram: AST.Template;
   endProgram: void;
   startBlock: AST.Block;
   endBlock: void;
-  append: boolean;
+  appendTrustedHTML: void;
+  appendTextNode: void;
 
   text: string;
   comment: string;
 
-  openElement: { element: AST.ElementNode; simple: boolean };
-  closeElement: AST.ElementNode;
-  openComponent: AST.ElementNode;
-  closeComponent: AST.ElementNode;
-  openNamedBlock: AST.ElementNode;
-  closeNamedBlock: AST.ElementNode;
-  closeDynamicComponent: AST.ElementNode;
-  flushElement: AST.ElementNode;
+  openSimpleElement: OpenElement;
+  openElementWithDynamicFeatures: OpenElement;
+  closeElement: void;
+  openComponent: OpenBlockComponent;
+  closeComponent: void;
+  openNamedBlock: OpenBlockElement;
+  closeNamedBlock: void;
+  closeDynamicComponent: void;
+  flushElement: void;
 
   staticArg: string;
   dynamicArg: string;
