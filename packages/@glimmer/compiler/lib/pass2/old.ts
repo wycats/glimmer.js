@@ -19,8 +19,8 @@ import {
   OutOpMap,
   OutOpName,
   Tail,
-} from './context';
-import { Pass3Op, Pass3OpsTable } from './ops';
+} from '../pass3/context';
+import { Pass3Op, Pass3OpsTable } from '../pass3/ops';
 
 export type str = string;
 import Core = WireFormat.Core;

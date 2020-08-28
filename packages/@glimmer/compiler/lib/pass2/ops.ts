@@ -41,11 +41,15 @@ export class Helper extends op('Helper').void() {}
 export class Modifier extends op('Modifier').void() {}
 export class InvokeBlock extends op('InvokeBlock').args<{ hasInverse: boolean }>() {}
 export class AttrSplat extends op('AttrSplat').args<{ symbol: number }>() {}
-export class GetPath extends op('GetPath').args<string[]>() {}
+export class GetPath extends op('GetPath').args<pass1.SourceSlice[]>() {}
 export class GetSymbol extends op('GetSymbol').args<{ symbol: number }>() {}
 export class GetFreeWithContext extends op('GetFreeWithContext').args<{
   symbol: number;
   context: ExpressionContext;
+}>() {}
+/** strict mode */
+export class GetFree extends op('GetFree').args<{
+  symbol: number;
 }>() {}
 
 export class Literal extends op('Literal').args<{
@@ -56,6 +60,7 @@ export class Concat extends op('Concat').void() {}
 export class HasBlock extends op('HasBlock').args<{ symbol: number }>() {}
 export class HasBlockParams extends op('HasBlockParams').args<{ symbol: number }>() {}
 export class PrepareArray extends op('PrepareArray').args<{ entries: number }>() {}
+export class EmptyParams extends op('EmptyParams').void() {}
 export class PrepareObject extends op('PrepareObject').args<{ entries: number }>() {}
 
 export type AnyArg = StaticArg | DynamicArg;
@@ -78,17 +83,18 @@ export import CloseComponent = pass1.CloseComponent;
 export import CloseNamedBlock = pass1.CloseNamedBlock;
 export import CloseDynamicComponent = pass1.CloseDynamicComponent;
 
-export type Passthrough =
-  | AppendComment
-  | OpenNamedBlock
-  | OpenSimpleElement
-  | OpenElementWithDynamicFeatures
-  | CloseElement
-  | CloseComponent
-  | CloseNamedBlock
-  | CloseDynamicComponent;
-
-export type Op =
+export type Expr =
+  | Literal
+  | GetPath
+  | GetSymbol
+  | GetFree
+  | GetFreeWithContext
+  | Concat
+  | Helper
+  | HasBlock
+  | HasBlockParams;
+export type Internal = PrepareArray | PrepareObject | EmptyParams;
+export type Statement =
   | StartProgram
   | EndProgram
   | StartBlock
@@ -107,21 +113,23 @@ export type Op =
   | TrustingComponentAttr
   | TrustingAttr
   | FlushElement
-  | Helper
   | Modifier
   | InvokeBlock
   | AttrSplat
-  | GetPath
-  | GetSymbol
-  | GetFreeWithContext
-  | Literal
-  | Concat
-  | HasBlock
-  | HasBlockParams
   | Partial
   | InElement
-  | PrepareArray
-  | PrepareObject
-  | Passthrough;
+  | AppendComment
+  | OpenNamedBlock
+  | OpenSimpleElement
+  | OpenElementWithDynamicFeatures
+  | CloseElement
+  | CloseComponent
+  | CloseNamedBlock
+  | CloseDynamicComponent;
+
+export type Op = Expr | Internal | Statement;
 
 export type OpTable = OpsTable<Op>;
+export type ExprTable = OpsTable<Expr>;
+export type InternalTable = OpsTable<Internal>;
+export type StatementTable = OpsTable<Statement>;

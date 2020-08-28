@@ -6,13 +6,14 @@ import {
 import { AST } from '@glimmer/syntax';
 import { DictSet } from '@glimmer/util';
 import { isArgument, isAttribute, isFlushElement } from '@glimmer/wire-format';
+import * as out from './out';
 
 export abstract class Block {
-  public statements: WF.Statement[] = [];
+  public statements: out.Statement[] = [];
 
   abstract toJSON(): Object;
 
-  push(...statements: WF.Statement[]) {
+  push(...statements: out.Statement[]) {
     this.statements.push(...statements);
   }
 }
@@ -68,7 +69,7 @@ export class ComponentBlock extends Block {
     super();
   }
 
-  push(...statements: WF.Statement[]) {
+  push(...statements: out.Statement[]) {
     for (let statement of statements) {
       if (this.inParams) {
         if (isFlushElement(statement)) {

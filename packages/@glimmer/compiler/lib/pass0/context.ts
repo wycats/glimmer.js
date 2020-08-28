@@ -2,13 +2,13 @@ import { ExpressionContext } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import { assert, NonemptyStack } from '@glimmer/util';
 import { positionToOffset } from '../location';
-import { isPresent } from '../pass1/is-node';
 import * as pass1 from '../pass1/ops';
 import { SourceOffsets } from '../shared/location';
-import { InputOpArgs, OpArgs, OpConstructor, UnlocatedOp } from '../shared/op';
+import { InputOpArgs, OpConstructor, UnlocatedOp } from '../shared/op';
 import { OpFactory, Ops } from '../shared/ops';
 import { BlockSymbolTable, SymbolTable } from '../template-visitor';
 import { CompilerHelper } from './index';
+import { isPresent } from './is-node';
 
 /**
  * This is the mutable state for this compiler pass.

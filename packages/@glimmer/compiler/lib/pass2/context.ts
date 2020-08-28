@@ -1,78 +1,158 @@
-import { AST, SyntaxError } from '@glimmer/syntax';
-import { expect, NonemptyStack } from '@glimmer/util';
-import { offsetsToLocation } from '../location';
+import { assert, expect, Stack } from '@glimmer/util';
+import { SourceOffsets } from '../shared/location';
+import { InputOpArgs, OpConstructor, UnlocatedOp } from '../shared/op';
 import { OpFactory, Ops } from '../shared/ops';
-import { SourceOffsets } from '../pass1/location';
-import { Pass3Op, Pass3OpsTable } from '../pass3/ops';
-import { SymbolTable } from '../template-visitor';
+import { BlockSymbolTable } from '../template-visitor';
+import { Block, ComponentBlock, InlineBlock, Template } from './blocks';
+import * as out from './out';
+import { Check } from './checks';
 
-export type SymbolStack = NonemptyStack<AST.Symbols>;
+export class CompilerContext {
+  readonly options: CompileOptions | undefined;
+  readonly factory: OpFactory<out.Op>;
+  readonly valueFactory: OpFactory<out.StackValue>;
 
-type OpName = keyof Pass3OpsTable;
-type OpMap = Pass3OpsTable;
-
-export class UnlocatedCompilerContext {
-  readonly symbols: SymbolStack = new NonemptyStack([SymbolTable.top()]);
-  #factory: OpFactory<OpName, OpMap>;
-  #source: string;
-
-  constructor(source: string) {
-    this.#factory = new OpFactory(source);
-    this.#source = source;
+  constructor(source: string, options?: CompileOptions) {
+    this.options = options;
+    this.factory = new OpFactory(source);
+    this.valueFactory = new OpFactory(source);
   }
 
-  forOffsets(offsets: SourceOffsets | null): CompilerContext {
-    return new CompilerContext(this.#source, this.symbols, this.#factory, offsets);
+  helpers(state: MutableState, offsets: SourceOffsets | null): Context {
+    return new Context(this, state, offsets);
   }
 }
 
-export class CompilerContext {
-  readonly #source: string;
-  readonly #symbols: SymbolStack;
-  readonly #factory: OpFactory<OpName, OpMap>;
+export class MutableState {
+  readonly template: Template;
+  readonly values: out.StackValue[] = [];
+  readonly blocks = new Stack<Block>();
+
+  constructor(template: Template) {
+    this.template = template;
+  }
+
+  push(...statements: out.Statement[]) {
+    this.blocks.current!.push(...statements);
+  }
+}
+
+export class Context {
+  readonly #ctx: CompilerContext;
+  readonly #state: MutableState;
   readonly #offsets: SourceOffsets | null;
 
-  constructor(
-    source: string,
-    symbols: SymbolStack,
-    factory: OpFactory<OpName, OpMap>,
-    offsets: SourceOffsets | null
-  ) {
-    this.#source = source;
-    this.#symbols = symbols;
-    this.#factory = factory;
+  constructor(ctx: CompilerContext, state: MutableState, offsets: SourceOffsets | null) {
+    this.#ctx = ctx;
+    this.#state = state;
     this.#offsets = offsets;
   }
 
-  get table(): AST.Symbols {
-    return this.#symbols.current;
+  get options(): CompileOptions | undefined {
+    return this.#ctx.options;
   }
 
-  error(message: string): never {
-    if (this.#offsets === null) {
-      throw new SyntaxError(message, null);
+  assertStackHas(size: number) {
+    assert(
+      this.#state.values.length >= size,
+      `Expected ${size} values on the stack, found ${this.#state.values.length}`
+    );
+  }
+
+  op<O extends out.Op>(name: OpConstructor<O>, ...args: InputOpArgs<O>): O {
+    return this.unlocatedOp(name, ...args).offsets(this.#offsets);
+  }
+
+  unlocatedOp<O extends out.Op>(name: OpConstructor<O>, ...args: InputOpArgs<O>): UnlocatedOp<O> {
+    return this.#ctx.factory.op(name, ...args);
+  }
+
+  ops(...ops: Ops<out.Op>[]): out.Op[] {
+    return this.#ctx.factory.ops(...ops);
+  }
+
+  map<T>(input: T[], callback: (input: T) => out.Op[]): out.Op[] {
+    return this.#ctx.factory.map(input, callback);
+  }
+
+  // TODO: consider a more semantic approach here
+  get blocks(): Stack<Block> {
+    return this.#state.blocks;
+  }
+
+  get template(): Template {
+    return this.#state.template;
+  }
+
+  get currentBlock(): Block {
+    return expect(this.#state.blocks.current, 'Expected a block on the stack');
+  }
+
+  get currentComponent(): ComponentBlock {
+    let block = this.currentBlock;
+
+    if (block instanceof ComponentBlock) {
+      return block;
     } else {
-      throw new SyntaxError(message, offsetsToLocation(this.#source, this.#offsets));
+      throw new Error(`Expected ComponentBlock on stack, found ${block.constructor.name}`);
     }
   }
 
-  push(symbols: AST.Symbols | undefined): void {
-    this.#symbols.push(expect(symbols, 'expected symbols'));
+  /// Utilities
+
+  // endComponent(): [string, WF.Statements.Attribute[], WF.Core.Hash, WF.Core.Blocks] {
+  //   let component = this.#state.blocks.pop();
+  //   assert(
+  //     component instanceof ComponentBlock,
+  //     'Compiler bug: endComponent() should end a component'
+  //   );
+
+  //   return (component as ComponentBlock).toJSON();
+  // }
+
+  startBlock(block: Block): void {
+    this.#state.blocks.push(block);
   }
 
-  pop(): void {
-    this.#symbols.pop();
+  startInlineBlock(symbols: BlockSymbolTable) {
+    let block: Block = new InlineBlock(symbols);
+    this.#state.blocks.push(block);
   }
 
-  op<N extends OpName>(name: N, args: OpMap[N]): Pass3Op {
-    return this.#factory.op(name, args).offsets(this.#offsets);
+  endInlineBlock(): void {
+    let blocks = this.#state.blocks;
+    let block = blocks.pop() as InlineBlock;
+    this.template.block.blocks.push(block.toJSON());
   }
 
-  ops(...ops: Ops<OpName, OpMap>[]): Pass3Op[] {
-    return this.#factory.ops(...ops);
+  unlocatedStackValue<O extends out.StackValue>(
+    name: OpConstructor<O>,
+    ...args: InputOpArgs<O>
+  ): UnlocatedOp<O> {
+    return this.#ctx.valueFactory.op(name, ...args);
   }
 
-  map<T>(input: T[], callback: (input: T) => Pass3Op[]): Pass3Op[] {
-    return this.#factory.map(input, callback);
+  stackValue<O extends out.StackValue>(name: OpConstructor<O>, ...args: InputOpArgs<O>): O {
+    return this.unlocatedStackValue(name, ...args).offsets(this.#offsets);
+  }
+
+  pushValue<O extends out.StackValue>(name: OpConstructor<O>, ...args: InputOpArgs<O>): O {
+    let val = this.stackValue(name, ...args);
+    this.#state.values.push(val);
+    return val;
+  }
+
+  // pushValue<S extends out.StackValue>(val: S) {
+  //   this.#state.values.push(val);
+  // }
+
+  popValue<T extends out.StackValue>(check: Check<T>): T {
+    let value = this.#state.values.pop();
+
+    if (check.match(value)) {
+      return value;
+    } else {
+      throw new Error(`unexpected ${typeof value}, expected ${check.name}`);
+    }
   }
 }
