@@ -1,6 +1,6 @@
 import { Option } from '@glimmer/interfaces';
 import { SourceLocation, SourcePosition } from '@glimmer/syntax';
-import { SourceOffsets } from './pass1/location';
+import { SourceOffsets } from './shared/location';
 
 type SourceOffset = number;
 

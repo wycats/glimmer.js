@@ -22,6 +22,7 @@ import {
   NormalizedBlocks,
 } from './builder-interface';
 import { AttrNamespace, Namespace } from '@simple-dom/interface';
+import { isPresent } from './shared/utils';
 
 interface Symbols {
   top: ProgramSymbols;
@@ -166,7 +167,7 @@ export function buildStatements(
 ): WireFormat.Statement[] {
   let out: WireFormat.Statement[] = [];
 
-  statements.forEach((s) => out.push(...buildStatement(normalizeStatement(s), symbols)));
+  statements.forEach(s => out.push(...buildStatement(normalizeStatement(s), symbols)));
 
   return out;
 }
@@ -177,7 +178,7 @@ export function buildNormalizedStatements(
 ): WireFormat.Statement[] {
   let out: WireFormat.Statement[] = [];
 
-  statements.forEach((s) => out.push(...buildStatement(s, symbols)));
+  statements.forEach(s => out.push(...buildStatement(s, symbols)));
 
   return out;
 }
@@ -207,7 +208,9 @@ export function buildStatement(
 
     case HeadKind.Call: {
       let { path, params, hash, trusted } = normalized;
-      let builtParams: Option<WireFormat.Core.Params> = params ? buildParams(params, symbols) : [];
+      let builtParams: Option<WireFormat.Core.Params> = params
+        ? buildParams(params, symbols)
+        : null;
       let builtHash: WireFormat.Core.Hash = hash ? buildHash(hash, symbols) : null;
       let builtExpr: WireFormat.Expression = buildPath(path, ExpressionContext.CallHead, symbols);
 
@@ -282,14 +285,14 @@ function buildElement(
     hasSplat(attrs) ? [Op.OpenElementWithSplat, name] : [Op.OpenElement, name],
   ];
   if (attrs) {
-    let { attributes, args } = buildAttrs(attrs, symbols);
-    out.push(...attributes);
+    let { params, args } = buildElementParams(attrs, symbols);
+    out.push(...params);
     assert(args === null, `Can't pass args to a simple element`);
   }
   out.push([Op.FlushElement]);
 
   if (Array.isArray(block)) {
-    block.forEach((s) => out.push(...buildStatement(s, symbols)));
+    block.forEach(s => out.push(...buildStatement(s, symbols)));
   } else if (block === null) {
     // do nothing
   } else {
@@ -304,20 +307,20 @@ function buildElement(
 function hasSplat(attrs: Option<NormalizedAttrs>): boolean {
   if (attrs === null) return false;
 
-  return Object.keys(attrs).some((a) => attrs[a] === HeadKind.Splat);
+  return Object.keys(attrs).some(a => attrs[a] === HeadKind.Splat);
 }
 
 export function buildAngleInvocation(
   { attrs, block, head }: NormalizedAngleInvocation,
   symbols: Symbols
 ): WireFormat.Statements.Component {
-  let attrList: WireFormat.Attribute[] = [];
+  let paramList: WireFormat.Parameter[] = [];
   let args: WireFormat.Core.Hash = null;
   let blockList: WireFormat.Statement[] = [];
 
   if (attrs) {
-    let built = buildAttrs(attrs, symbols);
-    attrList = built.attributes;
+    let built = buildElementParams(attrs, symbols);
+    paramList = built.params;
     args = built.args;
   }
 
@@ -326,30 +329,30 @@ export function buildAngleInvocation(
   return [
     Op.Component,
     buildExpression(head, ExpressionContext.CallHead, symbols),
-    attrList,
+    paramList,
     args,
     [['default'], [{ parameters: [], statements: blockList }]],
   ];
 }
 
-export function buildAttrs(
+export function buildElementParams(
   attrs: NormalizedAttrs,
   symbols: Symbols
-): { attributes: WireFormat.Attribute[]; args: WireFormat.Core.Hash } {
-  let attributes: WireFormat.Attribute[] = [];
+): { params: WireFormat.Parameter[]; args: WireFormat.Core.Hash } {
+  let params: WireFormat.Parameter[] = [];
   let keys: string[] = [];
   let values: WireFormat.Expression[] = [];
 
-  Object.keys(attrs).forEach((key) => {
+  Object.keys(attrs).forEach(key => {
     let value = attrs[key];
 
     if (value === HeadKind.Splat) {
-      attributes.push([Op.AttrSplat, symbols.block('&attrs')]);
+      params.push([Op.AttrSplat, symbols.block('&attrs')]);
     } else if (key[0] === '@') {
       keys.push(key);
       values.push(buildExpression(value, ExpressionContext.Expression, symbols));
     } else {
-      attributes.push(
+      params.push(
         ...buildAttributeValue(
           key,
           value,
@@ -361,7 +364,7 @@ export function buildAttrs(
     }
   });
 
-  return { attributes, args: keys.length === 0 ? null : [keys, values] };
+  return { params, args: isPresent(keys) && isPresent(values) ? [keys, values] : null };
 }
 
 export function extractNamespace(name: string): Option<AttrNamespace> {
@@ -563,16 +566,18 @@ export function buildParams(
   exprs: Option<NormalizedParams>,
   symbols: Symbols
 ): Option<WireFormat.Core.Params> {
-  if (exprs === null) return null;
+  if (exprs === null || !isPresent(exprs)) return null;
 
-  return exprs.map((e) => buildExpression(e, ExpressionContext.Expression, symbols));
+  return exprs.map(e =>
+    buildExpression(e, ExpressionContext.Expression, symbols)
+  ) as WireFormat.Core.ConcatParams;
 }
 
 export function buildConcat(
   exprs: [NormalizedExpression, ...NormalizedExpression[]],
   symbols: Symbols
 ): WireFormat.Core.ConcatParams {
-  return exprs.map((e) =>
+  return exprs.map(e =>
     buildExpression(e, ExpressionContext.AppendSingleId, symbols)
   ) as WireFormat.Core.ConcatParams;
 }
@@ -582,12 +587,12 @@ export function buildHash(exprs: Option<NormalizedHash>, symbols: Symbols): Wire
 
   let out: [string[], WireFormat.Expression[]] = [[], []];
 
-  Object.keys(exprs).forEach((key) => {
+  Object.keys(exprs).forEach(key => {
     out[0].push(key);
     out[1].push(buildExpression(exprs[key], ExpressionContext.Expression, symbols));
   });
 
-  return out;
+  return out as WireFormat.Core.Hash;
 }
 
 export function buildBlocks(
@@ -598,7 +603,7 @@ export function buildBlocks(
   let keys: string[] = [];
   let values: WireFormat.SerializedInlineBlock[] = [];
 
-  Object.keys(blocks).forEach((name) => {
+  Object.keys(blocks).forEach(name => {
     keys.push(name);
 
     if (name === 'default') {

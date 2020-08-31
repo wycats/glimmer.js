@@ -38,6 +38,14 @@ export default class WireFormatDebugger {
             this.formatBlocks(opcode[4]),
           ];
 
+        case Op.InElement:
+          return [
+            'in-element',
+            opcode[1],
+            this.formatOpcode(opcode[2]),
+            opcode[3] ? this.formatOpcode(opcode[3]) : undefined,
+          ];
+
         case Op.OpenElement:
           return ['open-element', inflateTagName(opcode[1])];
 
@@ -121,7 +129,7 @@ export default class WireFormatDebugger {
           return [
             'component',
             this.formatOpcode(opcode[1]),
-            this.formatAttrs(opcode[2]),
+            this.formatElementParams(opcode[2]),
             this.formatHash(opcode[3]),
             this.formatBlocks(opcode[4]),
           ];
@@ -154,6 +162,9 @@ export default class WireFormatDebugger {
 
         case Op.Concat:
           return ['concat', this.formatParams(opcode[1] as WireFormat.Core.Params)];
+
+        case Op.GetExprPath:
+          return ['get-expr-path', this.formatOpcode(opcode[1]), opcode[2]];
 
         default: {
           let [op, sym, path] = opcode;
@@ -198,7 +209,7 @@ export default class WireFormatDebugger {
     }
   }
 
-  private formatAttrs(opcodes: Option<WireFormat.Attribute[]>): Option<unknown[]> {
+  private formatElementParams(opcodes: Option<WireFormat.Parameter[]>): Option<unknown[]> {
     if (opcodes === null) return null;
     return opcodes.map((o) => this.formatOpcode(o));
   }

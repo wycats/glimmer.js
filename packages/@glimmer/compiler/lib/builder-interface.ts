@@ -7,11 +7,11 @@ export type BuilderBlockHash = BuilderHash | { as: string | string[] };
 export type BuilderBlocks = Dict<BuilderBlock>;
 export type BuilderAttrs = Dict<BuilderAttr>;
 
-export interface NormalizedParams extends Recursive<readonly NormalizedExpression[]> {}
-export interface NormalizedHash extends Recursive<Dict<NormalizedExpression>> {}
-export interface NormalizedBlock extends Recursive<NormalizedStatement[]> {}
-export interface NormalizedBlocks extends Recursive<Dict<NormalizedBlock>> {}
-export interface NormalizedAttrs extends Recursive<Dict<NormalizedAttr>> {}
+export interface NormalizedParams extends Array<NormalizedExpression> {}
+export interface NormalizedHash extends Dict<NormalizedExpression> {}
+export interface NormalizedBlock extends Array<NormalizedStatement> {}
+export interface NormalizedBlocks extends Dict<NormalizedBlock> {}
+export interface NormalizedAttrs extends Dict<NormalizedAttr> {}
 export type NormalizedAttr = HeadKind.Splat | NormalizedExpression;
 
 export interface NormalizedElement {
@@ -534,10 +534,8 @@ export type TupleBuilderExpression =
   | [Builder.HasBlockParams, string]
   | BuilderCallExpression;
 
-type Recursive<T> = T;
-
-interface Params extends Recursive<BuilderParams> {}
-interface Hash extends Recursive<Dict<BuilderExpression>> {}
+type Params = BuilderParams;
+type Hash = Dict<BuilderExpression>;
 
 export const enum ExpressionKind {
   Literal = 'Literal',
@@ -562,7 +560,7 @@ export interface NormalizedPath {
 
 export interface NormalizedConcat {
   type: ExpressionKind.Concat;
-  params: Recursive<[NormalizedExpression, ...NormalizedExpression[]]>;
+  params: [NormalizedExpression, ...NormalizedExpression[]];
 }
 
 export type NormalizedExpression =
@@ -841,7 +839,7 @@ export function isBuilderCallExpression(
   return typeof value[0] === 'string' && value[0][0] === '(';
 }
 
-export interface MiniBuilderBlock extends Recursive<BuilderStatement[]> {}
+export interface MiniBuilderBlock extends Array<BuilderStatement> {}
 
 export type BuilderBlock = MiniBuilderBlock;
 

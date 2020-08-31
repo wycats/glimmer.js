@@ -210,7 +210,7 @@ export namespace Statements {
   export type Comment = [SexpOpcodes.Comment, string];
   export type Modifier = [SexpOpcodes.Modifier, Expression, Params, Hash];
   export type Block = [SexpOpcodes.Block, Expression, Option<Params>, Hash, Blocks];
-  export type Component = [SexpOpcodes.Component, Expression, Attribute[], Hash, Blocks];
+  export type Component = [SexpOpcodes.Component, Expression, Parameter[], Hash, Blocks];
   export type OpenElement = [SexpOpcodes.OpenElement, string | WellKnownTagName];
   export type OpenElementWithSplat = [SexpOpcodes.OpenElementWithSplat, string | WellKnownTagName];
   export type FlushElement = [SexpOpcodes.FlushElement];
@@ -254,7 +254,7 @@ export namespace Statements {
   ];
   export type Debugger = [SexpOpcodes.Debugger, Core.EvalInfo];
   export type InElement = [
-    SexpOpcodes.InElement,
+    op: SexpOpcodes.InElement,
     guid: string,
     insertBefore: Expression,
     destination?: Expression
