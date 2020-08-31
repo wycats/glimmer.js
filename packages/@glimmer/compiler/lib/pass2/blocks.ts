@@ -1,39 +1,38 @@
 import {
   SerializedInlineBlock,
   SerializedTemplateBlock,
-  WireFormat as WF,
+  SexpOpcodes,
+  WireFormat as wire,
 } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import { DictSet } from '@glimmer/util';
 import { isArgument, isAttribute, isFlushElement } from '@glimmer/wire-format';
+import { SourceSlice } from '../pass1/ops';
+import { BlockSymbolTable, ProgramSymbolTable } from '../shared/symbol-table';
+import { isPresent } from '../shared/utils';
 import * as out from './out';
 
 export abstract class Block {
   public statements: out.Statement[] = [];
-
-  abstract toJSON(): Object;
 
   push(...statements: out.Statement[]) {
     this.statements.push(...statements);
   }
 }
 
-export class InlineBlock extends Block {
-  constructor(public table: AST.BlockSymbols) {
+export class NamedBlock extends Block {
+  constructor(public name: SourceSlice, public table: BlockSymbolTable) {
     super();
   }
 
-  toJSON(): SerializedInlineBlock {
-    return {
-      statements: this.statements,
-      parameters: this.table.slots,
-    };
-  }
-}
-
-export class NamedBlock extends InlineBlock {
-  constructor(public name: string, table: AST.BlockSymbols) {
-    super(table);
+  encode(): [name: string, block: SerializedInlineBlock] {
+    return [
+      this.name.getString(),
+      {
+        statements: this.statements.map(s => s.encode()),
+        parameters: this.table.slots,
+      },
+    ];
   }
 }
 
@@ -41,17 +40,17 @@ export class TemplateBlock extends Block {
   public type = 'template';
   public yields = new DictSet<string>();
   public named = new DictSet<string>();
-  public blocks: SerializedInlineBlock[] = [];
+  public blocks: NamedBlock[] = [];
   public hasEval = false;
 
   constructor(private symbolTable: AST.ProgramSymbols) {
     super();
   }
 
-  toJSON(): SerializedTemplateBlock {
+  encode(): SerializedTemplateBlock {
     return {
       symbols: this.symbolTable.symbols,
-      statements: this.statements,
+      statements: this.statements.map(s => s.encode()),
       hasEval: this.hasEval,
       upvars: this.symbolTable.freeVariables,
     };
@@ -59,25 +58,29 @@ export class TemplateBlock extends Block {
 }
 
 export class ComponentBlock extends Block {
-  public attributes: WF.Statements.Attribute[] = [];
-  public arguments: WF.Statements.Argument[] = [];
+  public attrs: out.Attr[] = [];
+  public args: out.Arg[] = [];
   private inParams = true;
   public positionals: number[] = [];
-  public blocks: Array<[string, SerializedInlineBlock]> = [];
+  public blocks: NamedBlock[] = [];
 
-  constructor(private tag: string, private table: AST.BlockSymbols, private selfClosing: boolean) {
+  constructor(
+    private tag: out.Expr,
+    private table: BlockSymbolTable,
+    private selfClosing: boolean
+  ) {
     super();
   }
 
   push(...statements: out.Statement[]) {
     for (let statement of statements) {
       if (this.inParams) {
-        if (isFlushElement(statement)) {
+        if (statement.name === 'FlushElement') {
           this.inParams = false;
-        } else if (isArgument(statement)) {
-          this.arguments.push(statement);
-        } else if (isAttribute(statement)) {
-          this.attributes.push(statement);
+        } else if (out.isArg(statement)) {
+          this.args.push(statement);
+        } else if (out.isAttr(statement)) {
+          this.attrs.push(statement);
         } else {
           throw new Error('Compile Error: only parameters allowed before flush-element');
         }
@@ -87,52 +90,57 @@ export class ComponentBlock extends Block {
     }
   }
 
-  pushBlock(name: string, block: SerializedInlineBlock) {
-    this.blocks.push([name, block]);
+  pushBlock(block: NamedBlock) {
+    if (this.selfClosing) {
+      throw new Error('Compile Error: self-closing components cannot have blocks');
+    }
+
+    this.blocks.push(block);
   }
 
-  toJSON(): [string, WF.Statements.Attribute[], WF.Core.Hash, WF.Core.Blocks] {
-    let blocks: WF.Core.Blocks;
-    let args = this.arguments;
-    let keys = args.map(arg => arg[1]);
-    let values = args.map(arg => arg[2]);
+  encode(): wire.Statements.Component {
+    let { args } = this;
+
+    let tag = this.tag.encode();
+    let attrs = this.attrs.map(a => a.encode());
+    let hash = isPresent(args) ? out.encodeHash(args, arg => arg.encodeHash()) : null;
+
+    let blocks: wire.Core.Blocks;
 
     if (this.selfClosing) {
       blocks = null;
-    } else if (this.blocks.length > 0) {
-      let keys: string[] = [];
-      let values: SerializedInlineBlock[] = [];
-
-      for (let i = 0; i < this.blocks.length; i++) {
-        let [key, value] = this.blocks[i];
-        keys.push(key.slice(1));
-        values.push(value);
-      }
-      blocks = [keys, values];
+    } else if (isPresent(this.blocks)) {
+      blocks = out.encodeHash(this.blocks, block => {
+        let [key, value] = block.encode();
+        return [key.slice(1), value];
+      });
     } else {
-      blocks = [
-        ['default'],
-        [
-          {
-            statements: this.statements,
-            parameters: this.table.slots,
-          },
-        ],
-      ];
+      blocks = [['default'], [this.encodeAsBlock()]];
     }
 
-    return [this.tag, this.attributes, [keys, values], blocks];
+    return [SexpOpcodes.Component, tag, attrs, hash, blocks];
+  }
+
+  encodeAsBlock(): SerializedInlineBlock {
+    return {
+      statements: this.statements.map(s => s.encode()),
+      parameters: this.table.slots,
+    };
   }
 }
 
 export class Template {
   public block: TemplateBlock;
 
-  constructor(symbols: AST.ProgramSymbols) {
+  constructor(private symbols: ProgramSymbolTable) {
     this.block = new TemplateBlock(symbols);
   }
 
-  toJSON(): SerializedTemplateBlock {
-    return this.block.toJSON();
+  get evalInfo(): wire.Core.EvalInfo {
+    return this.symbols.getEvalInfo();
+  }
+
+  encode(): SerializedTemplateBlock {
+    return this.block.encode();
   }
 }

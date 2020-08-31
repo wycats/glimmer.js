@@ -49,14 +49,18 @@ export const enum SexpOpcodes {
   Concat = 31,
 
   // GetPath
-  GetSymbol = 32, // GetPath + 0-2,
-  GetFree = 33,
-  GetFreeInAppendSingleId = 34, // GetContextualFree + 0-5
-  GetFreeInExpression = 35,
-  GetFreeInCallHead = 36,
-  GetFreeInBlockHead = 37,
-  GetFreeInModifierHead = 38,
-  GetFreeInComponentHead = 39,
+  GetExprPath = 32,
+  GetSymbol = 33, // GetPath + 0-2,
+  GetFree = 34,
+  GetFreeInAppendSingleId = 35, // GetContextualFree + 0-5
+  GetFreeInExpression = 36,
+  GetFreeInCallHead = 37,
+  GetFreeInBlockHead = 38,
+  GetFreeInModifierHead = 39,
+  GetFreeInComponentHead = 40,
+
+  // InElement
+  InElement = 41,
 
   GetPathStart = GetSymbol,
   GetContextualFreeStart = GetFreeInAppendSingleId,
@@ -78,13 +82,17 @@ export namespace Core {
   export type Expression = Expressions.Expression;
 
   export type Path = string[];
-  export type Params = Expression[];
   export type ConcatParams = [Expression, ...Expression[]];
-  export type Hash = Option<[string[], Expression[]]>;
+  export type Params = Option<ConcatParams>;
+  export type Hash = Option<[[string, ...string[]], [Expression, ...Expression[]]]>;
   export type Blocks = Option<[string[], SerializedInlineBlock[]]>;
   export type Args = [Params, Hash];
   export type EvalInfo = number[];
+
+  export type Syntax = Path | Params | ConcatParams | Hash | Blocks | Args | EvalInfo;
 }
+
+export type CoreSyntax = Core.Syntax;
 
 export const enum ExpressionContext {
   // An `Append` is a single identifier that is contained inside a curly (either in a
@@ -127,6 +135,7 @@ export namespace Expressions {
     | GetFreeInComponentHead;
   export type Get = GetSymbol | GetFree | GetContextualFree;
 
+  export type GetExprPath = [SexpOpcodes.GetExprPath, Expression, Path];
   export type GetPathSymbol = [SexpOpcodes.GetSymbol, number, Path];
   export type GetPathFree = [SexpOpcodes.GetFree, number, Path];
   export type GetPathFreeInAppendSingleId = [SexpOpcodes.GetFreeInAppendSingleId, number, Path];
@@ -143,7 +152,7 @@ export namespace Expressions {
     | GetPathFreeInBlockHead
     | GetPathFreeInModifierHead
     | GetPathFreeInComponentHead;
-  export type GetPath = GetPathSymbol | GetPathFree | GetPathContextualFree;
+  export type GetPath = GetExprPath | GetPathSymbol | GetPathFree | GetPathContextualFree;
 
   export type Value = string | number | boolean | null;
   export type Undefined = [SexpOpcodes.Undefined];
@@ -244,6 +253,12 @@ export namespace Statements {
     string?
   ];
   export type Debugger = [SexpOpcodes.Debugger, Core.EvalInfo];
+  export type InElement = [
+    SexpOpcodes.InElement,
+    guid: string,
+    insertBefore: Expression,
+    destination?: Expression
+  ];
 
   /**
    * A Handlebars statement
@@ -270,20 +285,21 @@ export namespace Statements {
     | DynamicArg
     | TrustingAttr
     | TrustingComponentAttr
-    | Debugger;
+    | Debugger
+    | InElement;
 
   export type Attribute =
     | Statements.StaticAttr
     | Statements.StaticComponentAttr
     | Statements.DynamicAttr
+    | Statements.TrustingAttr
     | Statements.ComponentAttr
-    | Statements.TrustingComponentAttr
-    | Statements.Modifier
-    | Statements.AttrSplat;
+    | Statements.TrustingComponentAttr;
 
+  export type ComponentFeature = Statements.Modifier | Statements.AttrSplat;
   export type Argument = Statements.StaticArg | Statements.DynamicArg;
 
-  export type Parameter = Attribute | Argument;
+  export type Parameter = Attribute | Argument | ComponentFeature;
 }
 
 /** A Handlebars statement */
@@ -294,6 +310,7 @@ export type Parameter = Statements.Parameter;
 
 export type SexpSyntax = Statement | TupleExpression;
 export type Syntax = SexpSyntax | Expressions.Value;
+export type SyntaxWithInternal = Syntax | CoreSyntax;
 
 /**
  * A JSON object that the Block was serialized into.

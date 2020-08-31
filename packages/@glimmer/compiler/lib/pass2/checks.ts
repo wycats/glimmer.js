@@ -1,9 +1,41 @@
 import { SourceSlice } from '../pass1/ops';
+import { ProgramSymbolTable } from '../shared/symbol-table';
+import { Block, ComponentBlock, NamedBlock } from './blocks';
 import * as out from './out';
 
-export interface Check<T extends out.StackValue> {
+export interface Check<T extends In, In = out.StackValue> {
   name: string;
-  match(value: out.StackValue): value is T;
+  match(value: In): value is T;
+}
+
+export const PRESENT: Check<NonNullable<unknown>, unknown> = {
+  name: 'present',
+  match(value: unknown): value is NonNullable<unknown> {
+    return value !== null && value !== undefined;
+  },
+};
+
+export const ABSENT: Check<null | undefined, unknown> = {
+  name: 'absent',
+  match(value: unknown): value is null | undefined {
+    return value === null || value === undefined;
+  },
+};
+
+export function AND<T extends In, U extends In, In>(
+  left: Check<T, In>,
+  right: Check<U, In>
+): Check<T & U, In> {
+  return {
+    name: `${left.name} & ${right.name}`,
+    match(value: In): value is T & U {
+      return left.match(value) && right.match(value);
+    },
+  };
+}
+
+export function present<T extends In, In>(check: Check<T, In>): Check<NonNullable<T>, In> {
+  return AND(PRESENT, check) as Check<NonNullable<T>, In>;
 }
 
 export const ANY: Check<out.StackValue> = {
@@ -68,3 +100,43 @@ export const STRING: Check<SourceSlice> = {
     return value.name === 'SourceSlice';
   },
 };
+
+export const PROGRAM_SYMBOL_TABLE: Check<ProgramSymbolTable, unknown> = {
+  name: 'ProgramSymbolTable',
+  match(value: unknown): value is ProgramSymbolTable {
+    if (typeof value !== 'object' || value === null) {
+      return false;
+    } else {
+      return value instanceof ProgramSymbolTable;
+    }
+  },
+};
+
+export const MAYBE_NAMED_BLOCK: Check<NamedBlock | undefined, Block | undefined> = {
+  name: 'NamedBlock?',
+  match(value: Block | undefined): value is NamedBlock | undefined {
+    return value === undefined || value instanceof NamedBlock;
+  },
+};
+
+export const NAMED_BLOCK: Check<NamedBlock, Block | undefined> = {
+  name: 'NamedBlock',
+  match(value: Block | undefined): value is NamedBlock {
+    return value !== undefined && value instanceof NamedBlock;
+  },
+};
+
+export const COMPONENT_BLOCK: Check<ComponentBlock, Block | undefined> = {
+  name: 'ComponentBlock',
+  match(value: Block | undefined): value is ComponentBlock {
+    return value !== undefined && value instanceof ComponentBlock;
+  },
+};
+
+export function check<T extends In, In>(value: In, checker: Check<T, In>): T {
+  if (checker.match(value)) {
+    return value;
+  } else {
+    throw new Error(`ASSERT: value wasn't a ${checker.name}`);
+  }
+}

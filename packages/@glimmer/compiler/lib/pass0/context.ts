@@ -6,7 +6,7 @@ import * as pass1 from '../pass1/ops';
 import { SourceOffsets } from '../shared/location';
 import { InputOpArgs, OpConstructor, UnlocatedOp } from '../shared/op';
 import { OpFactory, Ops } from '../shared/ops';
-import { BlockSymbolTable, SymbolTable } from '../template-visitor';
+import { BlockSymbolTable, SymbolTable } from '../shared/symbol-table';
 import { CompilerHelper } from './index';
 import { isPresent } from './is-node';
 
@@ -78,7 +78,7 @@ export interface ImmutableContext {
  * `CompilerHelper`, on the other hand, does not need to share an identity since it
  * has no mutable state at all.
  */
-export class Context {
+export class Context implements ImmutableContext {
   readonly statements: StatementVisitors;
   readonly expressions: OneToOneVisitors<AST.Expression | AST.ConcatStatement, pass1.Expr>;
   readonly state = new CompilerState();

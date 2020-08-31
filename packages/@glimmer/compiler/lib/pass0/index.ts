@@ -2,7 +2,8 @@ import { ExpressionContext } from '@glimmer/interfaces';
 import { AST, SyntaxError } from '@glimmer/syntax';
 import { assertNever } from '@glimmer/util';
 import * as pass1 from '../pass1/ops';
-import { ProgramSymbolTable } from '../template-visitor';
+import { ProgramSymbolTable } from '../shared/symbol-table';
+import { assertPresent } from '../shared/utils';
 import { getAttrNamespace } from '../utils';
 import { Context, offsetsForHashKey, paramsOffsets } from './context';
 import { EXPRESSIONS } from './expressions';
@@ -11,6 +12,7 @@ import {
   isHelperInvocation,
   IsKeywordCall,
   isKeywordCall,
+  isPresent,
   isSimplePath,
 } from './is-node';
 import { HAS_BLOCK, HAS_BLOCK_PARAMS } from './keywords';
@@ -295,17 +297,5 @@ function isTrustingNode(value: AST.MustacheStatement | AST.TextNode | AST.Concat
     return !value.escaped;
   } else {
     return false;
-  }
-}
-
-function isPresent<T>(list: T[]): list is [T, ...T[]] {
-  return list.length > 0;
-}
-
-function assertPresent<T>(list: T[]): [T, ...T[]] {
-  if (isPresent(list)) {
-    return list;
-  } else {
-    throw new Error(`unexpected empty list`);
   }
 }

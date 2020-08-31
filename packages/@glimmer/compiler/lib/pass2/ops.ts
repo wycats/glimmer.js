@@ -1,30 +1,35 @@
-import { ExpressionContext, WireFormat } from '@glimmer/interfaces';
+import { ExpressionContext } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import * as pass1 from '../pass1/ops';
 import { op, OpsTable } from '../shared/op';
+import { BlockSymbolTable, ProgramSymbolTable } from '../shared/symbol-table';
 
 export interface Attr {
   name: pass1.SourceSlice;
   namespace?: string;
 }
 
-export class InElement extends op('InElement').args<{
-  destination?: pass1.Expr;
+export class OpenInElement extends op('OpenInElement').args<{
   guid: string;
-  insertBefore?: pass1.Expr;
 }>() {}
 
-export class StartProgram extends op('StartProgram').args<AST.ProgramSymbols>() {}
+export class CloseInElement extends op('CloseInElement').void() {}
+
+export class StartProgram extends op('StartProgram').args<ProgramSymbolTable>() {}
 export class EndProgram extends op('EndProgram').void() {}
-export class StartBlock extends op('StartBlock').args<AST.BlockSymbols>() {}
+export class StartBlock extends op('StartBlock').args<{
+  symbols: BlockSymbolTable;
+  name: pass1.SourceSlice;
+}>() {}
 export class EndBlock extends op('EndBlock').void() {}
 export class AppendTrustedHTML extends op('AppendTrustedHTML').void() {}
 export class AppendTextNode extends op('AppendTextNode').void() {}
 export class OpenComponent extends op('OpenComponent').args<{
-  symbols: AST.BlockSymbols;
+  symbols: BlockSymbolTable;
+  selfClosing: boolean; // TODO: make this not required
 }>() {}
-export class StaticArg extends op('StaticArg').args<{ symbol: number }>() {}
-export class DynamicArg extends op('DynamicArg').args<{ symbol: number }>() {}
+export class StaticArg extends op('StaticArg').args<{ name: pass1.SourceSlice }>() {}
+export class DynamicArg extends op('DynamicArg').args<{ name: pass1.SourceSlice }>() {}
 export class StaticAttr extends op('StaticAttr').args<Attr>() {}
 export class StaticComponentAttr extends op('StaticComponentAttr').args<Attr>() {}
 export class ComponentAttr extends op('ComponentAttr').args<Attr>() {}
@@ -81,7 +86,6 @@ export import OpenElementWithDynamicFeatures = pass1.OpenElementWithDynamicFeatu
 export import CloseElement = pass1.CloseElement;
 export import CloseComponent = pass1.CloseComponent;
 export import CloseNamedBlock = pass1.CloseNamedBlock;
-export import CloseDynamicComponent = pass1.CloseDynamicComponent;
 
 export type Expr =
   | Literal
@@ -117,15 +121,13 @@ export type Statement =
   | InvokeBlock
   | AttrSplat
   | Partial
-  | InElement
   | AppendComment
   | OpenNamedBlock
   | OpenSimpleElement
   | OpenElementWithDynamicFeatures
   | CloseElement
   | CloseComponent
-  | CloseNamedBlock
-  | CloseDynamicComponent;
+  | CloseNamedBlock;
 
 export type Op = Expr | Internal | Statement;
 

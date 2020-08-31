@@ -2,10 +2,10 @@ import { assert, expect, Stack } from '@glimmer/util';
 import { SourceOffsets } from '../shared/location';
 import { InputOpArgs, OpConstructor, UnlocatedOp } from '../shared/op';
 import { OpFactory, Ops } from '../shared/ops';
-import { BlockSymbolTable } from '../template-visitor';
-import { Block, ComponentBlock, InlineBlock, Template } from './blocks';
+import { BlockSymbolTable } from '../shared/symbol-table';
+import { Block, ComponentBlock, NamedBlock, Template } from './blocks';
+import { check, Check, COMPONENT_BLOCK } from './checks';
 import * as out from './out';
-import { Check } from './checks';
 
 export class CompilerContext {
   readonly options: CompileOptions | undefined;
@@ -52,6 +52,20 @@ export class Context {
     return this.#ctx.options;
   }
 
+  get template(): Template {
+    return this.#state.template;
+  }
+
+  customizeComponentName(name: string): string {
+    let customize = this.options?.customizeComponentName;
+
+    if (customize) {
+      return customize(name);
+    } else {
+      return name;
+    }
+  }
+
   assertStackHas(size: number) {
     assert(
       this.#state.values.length >= size,
@@ -80,10 +94,6 @@ export class Context {
     return this.#state.blocks;
   }
 
-  get template(): Template {
-    return this.#state.template;
-  }
-
   get currentBlock(): Block {
     return expect(this.#state.blocks.current, 'Expected a block on the stack');
   }
@@ -100,29 +110,20 @@ export class Context {
 
   /// Utilities
 
-  // endComponent(): [string, WF.Statements.Attribute[], WF.Core.Hash, WF.Core.Blocks] {
-  //   let component = this.#state.blocks.pop();
-  //   assert(
-  //     component instanceof ComponentBlock,
-  //     'Compiler bug: endComponent() should end a component'
-  //   );
-
-  //   return (component as ComponentBlock).toJSON();
-  // }
+  endComponent(): ComponentBlock {
+    return check(this.#state.blocks.pop(), COMPONENT_BLOCK);
+  }
 
   startBlock(block: Block): void {
     this.#state.blocks.push(block);
   }
 
-  startInlineBlock(symbols: BlockSymbolTable) {
-    let block: Block = new InlineBlock(symbols);
-    this.#state.blocks.push(block);
+  addBlock(block: NamedBlock): void {
+    this.template.block.blocks.push(block);
   }
 
-  endInlineBlock(): void {
-    let blocks = this.#state.blocks;
-    let block = blocks.pop() as InlineBlock;
-    this.template.block.blocks.push(block.toJSON());
+  popBlock<T extends Block | undefined>(guard: Check<T, Block | undefined>): T {
+    return check(this.#state.blocks.pop(), guard);
   }
 
   unlocatedStackValue<O extends out.StackValue>(
@@ -146,7 +147,7 @@ export class Context {
   //   this.#state.values.push(val);
   // }
 
-  popValue<T extends out.StackValue>(check: Check<T>): T {
+  popValue<T extends out.StackValue>(check: Check<T, out.StackValue | undefined>): T {
     let value = this.#state.values.pop();
 
     if (check.match(value)) {

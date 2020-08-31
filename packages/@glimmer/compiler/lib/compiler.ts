@@ -9,7 +9,7 @@ import { PreprocessOptions } from '@glimmer/syntax';
 import { process } from './pass2';
 import { LOCAL_SHOULD_LOG } from '@glimmer/local-debug-flags';
 import { visit } from './pass1/index';
-import { allocate } from './pass2/old';
+import { allocate } from './pass2/old.bak';
 
 export interface TemplateIdFn {
   (src: string): Option<string>;

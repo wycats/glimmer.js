@@ -117,6 +117,7 @@ export const IN_ELEMENT = new KeywordBlock('in-element', {
 
     return ctx
       .op(pass1.InElement, {
+        block: ctx.visitBlock(ctx.slice('default').offsets(null), block.program),
         insertBefore: insertBefore
           ? ctx.visitExpr(insertBefore, ExpressionContext.Expression)
           : undefined,
@@ -162,7 +163,7 @@ export const YIELD = new KeywordStatement('yield', {
 });
 
 export const PARTIAL = new KeywordStatement('partial', {
-  assert(statement: KeywordStatementNode<'partial'>): void {
+  assert(statement: KeywordStatementNode<'partial'>): AST.Expression | undefined {
     let {
       params,
       hash: { pairs },
@@ -170,7 +171,9 @@ export const PARTIAL = new KeywordStatement('partial', {
       loc,
     } = statement;
 
-    if (isPresent(params) && params.length !== 1) {
+    let hasParams = isPresent(params);
+
+    if (hasParams && params.length !== 1) {
       throw new SyntaxError(
         `Partial found with ${params.length} arguments. You must specify a template name. (on line ${loc.start.line})`,
         statement.loc
@@ -190,10 +193,23 @@ export const PARTIAL = new KeywordStatement('partial', {
         statement.loc
       );
     }
+
+    return params[0];
   },
 
-  translate(statement: KeywordStatementNode<'partial'>, ctx: Context): pass1.Statement {
-    return ctx.op(pass1.Partial, { params: ctx.helper.params(statement) }).loc(statement);
+  translate(
+    statement: KeywordStatementNode<'partial'>,
+    ctx: Context,
+    expr: AST.Expression | undefined
+  ): pass1.Statement {
+    return ctx
+      .op(pass1.Partial, {
+        expr:
+          expr === undefined
+            ? ctx.visitExpr(builders.undefined(), ExpressionContext.Expression)
+            : ctx.visitExpr(expr, ExpressionContext.Expression),
+      })
+      .loc(statement);
   },
 });
 

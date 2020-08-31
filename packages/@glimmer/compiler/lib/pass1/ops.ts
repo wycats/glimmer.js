@@ -1,7 +1,7 @@
 import { ExpressionContext } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
 import { op, Op, OpsTable } from '../shared/op';
-import { SymbolTable, BlockSymbolTable, ProgramSymbolTable } from '../template-visitor';
+import { BlockSymbolTable, ProgramSymbolTable } from '../shared/symbol-table';
 
 export interface AttrKind {
   // triple-curly
@@ -93,13 +93,14 @@ export type ExprTable = OpsTable<Expr>;
 // through is currently too annoying
 export class Yield extends op('Yield').args<{ target: SourceSlice }>() {}
 
-export class Partial extends op('Partial').args<{ params: Params }>() {}
+export class Partial extends op('Partial').args<{ expr: Expr }>() {}
 export class Debugger extends op('Debugger').void() {}
 
 export class InElement extends op('InElement').args<{
   destination?: Expr;
   guid: string;
   insertBefore?: Expr;
+  block: Block;
 }>() {}
 
 export class AppendTextNode extends op('AppendTextNode').args<{ value: Expr }>() {}
@@ -146,7 +147,6 @@ export class OpenElementWithDynamicFeatures extends op('OpenElementWithDynamicFe
 
 export class FlushElement extends op('FlushElement').args<{ symbols: BlockSymbolTable }>() {}
 export class CloseNamedBlock extends op('CloseNamedBlock').void() {}
-export class CloseDynamicComponent extends op('CloseDynamicComponent').void() {}
 export class CloseComponent extends op('CloseComponent').void() {}
 export class CloseElement extends op('CloseElement').void() {}
 export class CloseElementBlock extends op('CloseElementBlock').void() {}
@@ -178,7 +178,6 @@ export type Statement =
   | OpenElementWithDynamicFeatures
   | FlushElement
   | CloseNamedBlock
-  | CloseDynamicComponent
   | CloseComponent
   | CloseElement
   | CloseElementBlock

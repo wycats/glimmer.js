@@ -11,7 +11,6 @@ export {
 export { BuilderStatement, Builder } from './lib/builder-interface';
 
 // exported only for tests
-export { default as TemplateVisitor } from './lib/template-visitor';
 export { default as WireFormatDebugger } from './lib/wire-format-debug';
 
 export * from './lib/location';

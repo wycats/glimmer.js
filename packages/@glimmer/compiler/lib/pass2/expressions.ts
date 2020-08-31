@@ -6,9 +6,10 @@ import { CONCAT_PARAMS, EXPR, GET, HASH, PARAMS, STRING } from './checks';
 import { Context } from './context';
 import * as pass2 from './ops';
 import * as out from './out';
+import { isPresent } from '../shared/utils';
 
 class InternalVisitors implements Visitors<pass2.InternalTable> {
-  PrepareArray({ entries }: OpArgs<pass2.PrepareArray>, ctx: Context): void {
+  PrepareArray(ctx: Context, { entries }: OpArgs<pass2.PrepareArray>): void {
     ctx.assertStackHas(entries);
 
     let values: out.Expr[] = [];
@@ -17,14 +18,18 @@ class InternalVisitors implements Visitors<pass2.InternalTable> {
       values.push(ctx.popValue(EXPR));
     }
 
-    ctx.pushValue(out.Params, { list: values });
+    if (isPresent(values)) {
+      ctx.pushValue(out.Params, { list: values });
+    } else {
+      ctx.pushValue(out.EmptyParams);
+    }
   }
 
-  EmptyParams(_: OpArgs<pass2.EmptyParams>, ctx: Context): void {
+  EmptyParams(ctx: Context): void {
     ctx.pushValue(out.EmptyParams);
   }
 
-  PrepareObject({ entries }: OpArgs<pass2.PrepareObject>, ctx: Context): void {
+  PrepareObject(ctx: Context, { entries }: OpArgs<pass2.PrepareObject>): void {
     if (entries === 0) {
       ctx.pushValue(out.EmptyHash);
     }
@@ -39,12 +44,16 @@ class InternalVisitors implements Visitors<pass2.InternalTable> {
       pairs.push(ctx.stackValue(out.HashPair, { key, value }));
     }
 
-    ctx.pushValue(out.Hash, { pairs });
+    if (isPresent(pairs)) {
+      ctx.pushValue(out.Hash, { pairs });
+    } else {
+      ctx.pushValue(out.EmptyHash);
+    }
   }
 }
 
 class ExpressionVisitors implements Visitors<pass2.ExprTable> {
-  Literal({ value }: OpArgs<pass2.Literal>, ctx: Context): void {
+  Literal(ctx: Context, { value }: OpArgs<pass2.Literal>): void {
     if (value === undefined) {
       ctx.pushValue(out.Undefined);
     } else {
@@ -52,28 +61,36 @@ class ExpressionVisitors implements Visitors<pass2.ExprTable> {
     }
   }
 
-  GetFreeWithContext({ symbol, context }: OpArgs<pass2.GetFreeWithContext>, ctx: Context): void {
+  HasBlock(ctx: Context, { symbol }: OpArgs<pass2.HasBlock>): void {
+    ctx.pushValue(out.HasBlock, { symbol });
+  }
+
+  HasBlockParams(ctx: Context, { symbol }: OpArgs<pass2.HasBlockParams>): void {
+    ctx.pushValue(out.HasBlockParams, { symbol });
+  }
+
+  GetFreeWithContext(ctx: Context, { symbol, context }: OpArgs<pass2.GetFreeWithContext>): void {
     ctx.pushValue(out.GetContextualFree, { symbol, context: expressionContextOp(context) });
   }
 
-  GetFree({ symbol }: OpArgs<pass2.GetFree>, ctx: Context): void {
+  GetFree(ctx: Context, { symbol }: OpArgs<pass2.GetFree>): void {
     ctx.pushValue(out.GetFree, { symbol });
   }
 
-  GetSymbol({ symbol }: OpArgs<pass2.GetSymbol>, ctx: Context): void {
+  GetSymbol(ctx: Context, { symbol }: OpArgs<pass2.GetSymbol>): void {
     ctx.pushValue(out.GetSymbol, { symbol });
   }
 
-  GetPath(tail: OpArgs<pass2.GetPath>, ctx: Context): void {
+  GetPath(ctx: Context, tail: OpArgs<pass2.GetPath>): void {
     let head = ctx.popValue(GET);
     ctx.pushValue(out.GetPath, { head, tail });
   }
 
-  Concat(_: OpArgs<pass2.Concat>, ctx: Context): void {
+  Concat(ctx: Context): void {
     ctx.pushValue(out.Concat, { parts: ctx.popValue(CONCAT_PARAMS) });
   }
 
-  Helper(_: OpArgs<pass2.Helper>, ctx: Context): void {
+  Helper(ctx: Context): void {
     let head = ctx.popValue(EXPR);
     let params = ctx.popValue(PARAMS);
     let hash = ctx.popValue(HASH);

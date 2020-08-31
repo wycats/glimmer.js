@@ -3,7 +3,7 @@ import * as pass2 from '../pass2/ops';
 import { SourceOffsets } from '../shared/location';
 import { InputOpArgs, Op, OpArgs, OpConstructor, UnlocatedOp } from '../shared/op';
 import { OpFactory, Ops } from '../shared/ops';
-import { SymbolTable } from '../template-visitor';
+import { SymbolTable } from '../shared/symbol-table';
 import { CompilerHelper } from './index';
 import * as pass1 from './ops';
 

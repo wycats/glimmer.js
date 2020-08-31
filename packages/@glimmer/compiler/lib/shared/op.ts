@@ -10,6 +10,11 @@ export type OpsTable<O extends Op> = {
 export abstract class Op<Args = unknown> {
   abstract readonly name: string;
   constructor(readonly offsets: SourceOffsets | null, readonly args: Args) {}
+
+  // TODO:
+  // abstract stack = [{ value: EXPR }]
+  // this would automate the process of extracting values off of the stack
+  // and checking them for the right types
 }
 
 export type OpName<O extends Op> = O['name'];
@@ -33,6 +38,17 @@ export type OpConstructor<O extends Op> = O extends Op<infer Args>
       new (offsets: SourceOffsets | null, args: Args): O;
     }
   : never;
+
+export function args<Args>(): {
+  named: <N extends string>(name: N) => OpConstructor<Op<Args> & { name: N }>;
+} {
+  return {
+    named: <N extends string>(name: N) =>
+      class extends Op<Args> {
+        readonly name: N = name;
+      },
+  };
+}
 
 export function op<N extends string>(
   name: N
@@ -81,10 +97,10 @@ export class UnlocatedOp<O extends Op> {
       let first = location[0];
       let last = location[location.length - 1];
 
-      return new this.Class(range(first.loc.start, last.loc.end, this.source), ...this.args);
+      return new this.Class(range(first.loc.start, last.loc.end, this.source), this.args) as O;
     } else {
       let loc = 'loc' in location ? location.loc : location;
-      return new this.Class(range(loc.start, loc.end, this.source), ...this.args);
+      return new this.Class(range(loc.start, loc.end, this.source), this.args) as O;
     }
   }
 
@@ -95,22 +111,22 @@ export class UnlocatedOp<O extends Op> {
       | [LocatedWithOffsets, ...LocatedWithOffsets[]]
       | null
   ): O {
-    if (location !== null) {
-      if ('offsets' in location) {
-        return new this.Class(this.args, location.offsets);
-      } else if (Array.isArray(location)) {
-        let start = location[0];
-        let end = location[location.length - 1];
+    let offsets: SourceOffsets | null;
 
-        let startOffset = start.offsets.start;
-        let endOffset = end.offsets.end;
-
-        return new this.Class(this.args, { start: startOffset, end: endOffset });
-      } else {
-        return new this.Class(this.args, location);
-      }
+    if (location === null || 'start' in location) {
+      offsets = location;
+    } else if ('offsets' in location) {
+      offsets = location.offsets;
     } else {
-      return new this.Class(this.args, null);
+      let start = location[0];
+      let end = location[location.length - 1];
+
+      let startOffset = start.offsets.start;
+      let endOffset = end.offsets.end;
+
+      offsets = { start: startOffset, end: endOffset };
     }
+
+    return new this.Class(offsets, this.args) as O;
   }
 }

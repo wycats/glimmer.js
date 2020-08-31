@@ -1,7 +1,7 @@
 import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST, isLiteral, SourceLocation } from '@glimmer/syntax';
 import * as pass1 from '../pass1/ops';
-import { BlockSymbolTable, SymbolTable } from '../template-visitor';
+import { BlockSymbolTable, SymbolTable } from '../shared/symbol-table';
 import { Context, Pass0Visitor } from './context';
 import { hasPath, isHelperInvocation, isKeywordCall } from './is-node';
 import { DEBUGGER, IN_ELEMENT, PARTIAL, YIELD } from './keywords';
@@ -303,8 +303,6 @@ function closeElementOp(
 ): pass1.Statement {
   switch (classified.is) {
     case 'dynamic-tag':
-      return ctx.op(pass1.CloseDynamicComponent).loc(classified);
-
     case 'component':
       return ctx.op(pass1.CloseComponent).loc(classified);
 
@@ -314,6 +312,11 @@ function closeElementOp(
   }
 }
 
+// TODO: I transcribed this from the existing code, but the only
+// reason this difference matters is that splattributes requires
+// a special ElementOperations that merges attributes, so I don't
+// know why modifiers matter (it might matter if modifiers become
+// allowed to abstract attributes)
 function isHTMLElement(element: AST.ElementNode): boolean {
   let { attributes, modifiers } = element;
 
