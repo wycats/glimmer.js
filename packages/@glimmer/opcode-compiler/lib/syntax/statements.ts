@@ -18,6 +18,7 @@ import { ReplayableIf } from '../opcode-builder/helpers/conditional';
 import { arr, strArray, templateMeta } from '../opcode-builder/operands';
 import { expectSloppyFreeVariable, isStrictFreeVariable, trySloppyFreeVariable } from '../utils';
 import { Compilers } from './compilers';
+import { getStringFromValue, isStringLiteral } from '@glimmer/wire-format';
 
 export const STATEMENTS = new Compilers<StatementSexpOpcode, StatementCompileActions>();
 
@@ -171,7 +172,7 @@ STATEMENTS.add(SexpOpcodes.Partial, ([, name, evalInfo], meta) =>
         op(
           Op.InvokePartial,
           templateMeta(meta.referrer),
-          strArray(meta.evalSymbols!),
+          strArray(meta.evalSymbols || EMPTY_STRING_ARRAY),
           arr(evalInfo)
         ),
         op(Op.PopScope),
@@ -191,6 +192,11 @@ STATEMENTS.add(SexpOpcodes.Debugger, ([, evalInfo], meta) =>
 
 STATEMENTS.add(SexpOpcodes.Append, (sexp) => {
   let [, value] = sexp;
+
+  // Special case for static strings
+  if (isStringLiteral(value)) {
+    return op(Op.Text, getStringFromValue(value));
+  }
 
   return op('CompileInline', {
     inline: sexp,

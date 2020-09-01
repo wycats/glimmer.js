@@ -210,7 +210,7 @@ export function buildStatement(
       return [
         [
           normalized.trusted ? Op.TrustingAppend : Op.Append,
-          buildExpression(normalized.expr, ExpressionContext.Expression, symbols),
+          buildExpression(normalized.expr, 'PossibleAmbiguous', symbols),
         ],
       ];
     }
@@ -427,7 +427,7 @@ export function buildAttributeValue(
         [
           Op.DynamicAttr,
           name,
-          buildExpression(value, ExpressionContext.AppendSingleId, symbols),
+          buildExpression(value, 'PossibleAmbiguous', symbols),
           namespace ?? undefined,
         ],
       ];
@@ -436,7 +436,7 @@ export function buildAttributeValue(
 
 export function buildExpression(
   expr: NormalizedExpression,
-  context: ExpressionContext,
+  context: ExpressionContext | 'PossibleAmbiguous',
   symbols: Symbols
 ): WireFormat.Expression {
   switch (expr.type) {
@@ -445,7 +445,11 @@ export function buildExpression(
     }
 
     case ExpressionKind.GetVar: {
-      return buildGetVar(expr, context, symbols);
+      return buildGetVar(
+        expr,
+        context === 'PossibleAmbiguous' ? ExpressionContext.AppendSingleId : context,
+        symbols
+      );
     }
 
     case ExpressionKind.Concat: {
@@ -609,7 +613,7 @@ export function buildConcat(
   symbols: Symbols
 ): WireFormat.Core.ConcatParams {
   return exprs.map(e =>
-    buildExpression(e, ExpressionContext.AppendSingleId, symbols)
+    buildExpression(e, 'PossibleAmbiguous', symbols)
   ) as WireFormat.Core.ConcatParams;
 }
 

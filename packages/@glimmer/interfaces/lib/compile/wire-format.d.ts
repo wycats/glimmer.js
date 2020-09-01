@@ -142,7 +142,11 @@ export namespace Expressions {
   export type GetPath = [SexpOpcodes.GetPath, Expression, Path];
   export type Get = GetVar | GetPath;
 
-  export type Value = string | number | boolean | null;
+  export type StringValue = string;
+  export type NumberValue = number;
+  export type BooleanValue = boolean;
+  export type NullValue = null;
+  export type Value = StringValue | NumberValue | BooleanValue | NullValue;
   export type Undefined = [SexpOpcodes.Undefined];
 
   export type TupleExpression = Get | Concat | HasBlock | HasBlockParams | Helper | Undefined;

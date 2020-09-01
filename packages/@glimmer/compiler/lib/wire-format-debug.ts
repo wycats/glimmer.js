@@ -1,11 +1,11 @@
 import {
-  WireFormat,
-  SexpOpcodes as Op,
   Option,
   SerializedInlineBlock,
   SerializedTemplateBlock,
+  SexpOpcodes as Op,
+  WireFormat,
 } from '@glimmer/interfaces';
-import { dict, exhausted, assert } from '@glimmer/util';
+import { dict } from '@glimmer/util';
 import { inflateAttrName, inflateTagName } from './utils';
 
 export default class WireFormatDebugger {
@@ -182,7 +182,7 @@ export default class WireFormatDebugger {
           return ['get-free-in-component-head', this.program.upvars[opcode[1]]];
 
         case Op.GetFreeInExpression:
-          return ['get-free-in-expression-head', this.program.upvars[opcode[1]]];
+          return ['get-free-in-expression', this.program.upvars[opcode[1]]];
 
         case Op.GetFreeInModifierHead:
           return ['get-free-in-modifier-head', this.program.upvars[opcode[1]]];

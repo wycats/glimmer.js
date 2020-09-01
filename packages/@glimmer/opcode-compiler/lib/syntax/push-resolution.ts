@@ -14,7 +14,7 @@ import {
   TemplateCompilationContext,
   WireFormat,
 } from '@glimmer/interfaces';
-import { exhausted } from '@glimmer/util';
+import { EMPTY_STRING_ARRAY, exhausted } from '@glimmer/util';
 import { emptyArray } from '@glimmer/util';
 import { error, op } from '../opcode-builder/encoder';
 import { CompilePositional } from '../opcode-builder/helpers/shared';
@@ -161,7 +161,7 @@ export function compileSimpleArgs(
     }
   }
 
-  out.push(op(Op.PushArgs, strArray(names), strArray(emptyArray<string>()), flags));
+  out.push(op(Op.PushArgs, strArray(names), strArray(EMPTY_STRING_ARRAY), flags));
 
   return out;
 }
