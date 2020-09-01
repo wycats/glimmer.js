@@ -1,13 +1,14 @@
-import { preprocess } from '@glimmer/syntax';
 import {
   Option,
-  TemplateJavascript,
+  SerializedTemplateBlock,
   SerializedTemplateWithLazyBlock,
-  SerializedTemplate,
+  TemplateJavascript,
 } from '@glimmer/interfaces';
-import { PreprocessOptions } from '@glimmer/syntax';
 import { LOCAL_SHOULD_LOG } from '@glimmer/local-debug-flags';
-import { visit } from './pass1/index';
+import { preprocess, PreprocessOptions } from '@glimmer/syntax';
+import { visit as pass0 } from './pass0/index';
+import { visit as pass1 } from './pass1/index';
+import { visit as pass2 } from './pass2/index';
 
 export interface TemplateIdFn {
   (src: string): Option<string>;
@@ -65,26 +66,22 @@ const defaultOptions: PrecompileOptions = {
 export function precompileJSON(
   source: string,
   options?: PrecompileOptions
-): SerializedTemplate<unknown>;
+): SerializedTemplateBlock;
 export function precompileJSON(
   string: string,
   options: PrecompileOptions = defaultOptions
-): SerializedTemplate<unknown> {
+): SerializedTemplateBlock {
   let ast = preprocess(string, options);
-  let { meta } = options;
-  let opcodes = visit(string, ast);
-  let ops = allocate(opcodes, string);
-
-  let template = process(ops, ast.symbols!, string, options);
+  let pass1In = pass0(string, ast);
+  let pass2In = pass1(string, pass1In);
+  let pass2Out = pass2(string, pass2In, options);
+  let block = pass2Out.encode();
 
   if (LOCAL_SHOULD_LOG) {
-    console.log(`Template ->`, template);
+    console.log(`Template ->`, block);
   }
 
-  return {
-    block: template.block.toJSON(),
-    meta,
-  };
+  return block;
 }
 
 /*
@@ -106,23 +103,24 @@ export function precompile(
   source: string,
   options: PrecompileOptions = defaultOptions
 ): TemplateJavascript {
-  let ast = preprocess(source, options);
-  let { meta } = options;
-  let opcodes = visit(source, ast);
-  let ops = allocate(opcodes, source);
+  let block = precompileJSON(source, options);
+  // let ast = preprocess(source, options);
+  // let { meta } = options;
+  // let opcodes = visit(source, ast);
+  // let ops = allocate(opcodes, source);
 
-  let template = process(ops, ast.symbols!, source, options);
+  // let template = process(ops, ast.symbols!, source, options);
 
-  if (LOCAL_SHOULD_LOG) {
-    console.log(`Template ->`, template);
-  }
+  // if (LOCAL_SHOULD_LOG) {
+  //   console.log(`Template ->`, template);
+  // }
 
   let idFn = options.id || defaultId;
-  let blockJSON = JSON.stringify(template.block.toJSON());
+  let blockJSON = JSON.stringify(block);
   let templateJSONObject: SerializedTemplateWithLazyBlock<unknown> = {
-    id: idFn(JSON.stringify(meta) + blockJSON),
+    id: idFn(JSON.stringify(options.meta) + blockJSON),
     block: blockJSON,
-    meta,
+    meta: options.meta,
   };
 
   // JSON is javascript

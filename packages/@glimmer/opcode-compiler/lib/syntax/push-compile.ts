@@ -1,31 +1,31 @@
-import { other } from '../opcode-builder/operands';
 import {
+  BuilderOp,
+  CompilableTemplate,
+  CompileErrorOp,
+  CompileMode,
+  DynamicComponentOp,
   HighLevelCompileOp,
   HighLevelCompileOpcode,
-  CompileMode,
-  Op,
-  MachineOp,
-  StatementCompileActions,
-  InvokeStaticOp,
-  DynamicComponentOp,
   IfResolvedComponentOp,
+  InvokeStaticOp,
+  MachineOp,
+  Op,
+  Option,
+  StatementCompileActions,
   SyntaxCompilationContext,
   TemplateCompilationContext,
-  Option,
-  CompilableTemplate,
-  BuilderOp,
-  CompileErrorOp,
 } from '@glimmer/interfaces';
-import { op } from '../opcode-builder/encoder';
-import { CompileArgs } from '../opcode-builder/helpers/shared';
-import { compilableBlock, PLACEHOLDER_HANDLE } from '../compilable-template';
-import { InvokeDynamicComponent } from '../opcode-builder/helpers/components';
-import { resolveLayoutForTag } from '../resolver';
 import { exhausted } from '@glimmer/util';
-import { concatStatements, isHandled } from './concat';
-import { compileInline, compileBlock } from '../compiler';
+import { compilableBlock, PLACEHOLDER_HANDLE } from '../compilable-template';
+import { compileBlock, compileInline } from '../compiler';
+import { op } from '../opcode-builder/encoder';
+import { InvokeDynamicComponent } from '../opcode-builder/helpers/components';
+import { CompileArgs } from '../opcode-builder/helpers/shared';
 import { PushPrimitive } from '../opcode-builder/helpers/vm';
+import { other } from '../opcode-builder/operands';
+import { resolveLayoutForTag } from '../resolver';
 import { namedBlocks } from '../utils';
+import { concatStatements, isHandled } from './concat';
 
 export default function pushCompileOp(
   context: TemplateCompilationContext,
@@ -112,16 +112,16 @@ function DynamicComponent(
   context: TemplateCompilationContext,
   action: DynamicComponentOp
 ): StatementCompileActions {
-  let { definition, attrs, params, args, blocks, atNames } = action.op1;
+  let { definition, elementBlock, params, args, blocks, atNames } = action.op1;
 
-  let attrsBlock = attrs && attrs.length > 0 ? compilableBlock(attrs, context.meta) : null;
+  let elementParamsBlock = elementBlock ? compilableBlock(elementBlock, context.meta) : null;
 
   let compiled =
     Array.isArray(blocks) || blocks === null ? namedBlocks(blocks, context.meta) : blocks;
 
   return InvokeDynamicComponent(context.meta, {
     definition,
-    attrs: attrsBlock,
+    elementBlock: elementParamsBlock,
     params,
     hash: args,
     atNames,
@@ -133,7 +133,7 @@ function IfResolvedComponent(
   context: TemplateCompilationContext,
   action: IfResolvedComponentOp
 ): StatementCompileActions {
-  let { name, attrs, blocks, staticTemplate, dynamicTemplate, orElse } = action.op1;
+  let { name, elementBlock, blocks, staticTemplate, dynamicTemplate, orElse } = action.op1;
   let component = resolveLayoutForTag(name, {
     resolver: context.syntax.program.resolverDelegate,
     meta: context.meta,
@@ -144,18 +144,18 @@ function IfResolvedComponent(
   if (component !== null) {
     let { handle, capabilities, compilable } = component;
 
-    let attrsBlock = compilableBlock(attrs, meta);
+    let attrsBlock = elementBlock ? compilableBlock(elementBlock, meta) : null;
 
     let compilableBlocks = namedBlocks(blocks, meta);
 
     if (compilable !== null) {
       return staticTemplate(handle, capabilities, compilable, {
-        attrs: attrsBlock,
+        elementBlock: attrsBlock,
         blocks: compilableBlocks,
       });
     } else {
       return dynamicTemplate(handle, capabilities, {
-        attrs: attrsBlock,
+        elementBlock: attrsBlock,
         blocks: compilableBlocks,
       });
     }

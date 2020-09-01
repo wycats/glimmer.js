@@ -72,7 +72,7 @@ Object.keys(cases).forEach(string => {
     let [line, column] = span.split(':').map(i => parseInt(i, 10));
 
     test(`${string} @ ${line}:${column} -> ${offset}`, assert => {
-      assert.deepEqual(positionToOffset(string, line, column), offset === null ? null : offset);
+      assert.deepEqual(positionToOffset(string, { line, column }), offset === null ? null : offset);
     });
   }
 });

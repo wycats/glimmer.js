@@ -1,5 +1,6 @@
-import { ExpressionContext } from '@glimmer/interfaces';
+import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
+import { PresentArray } from '@glimmer/util';
 import { op, Op, OpsTable } from '../shared/op';
 import { BlockSymbolTable, ProgramSymbolTable } from '../shared/symbol-table';
 
@@ -34,7 +35,7 @@ export class SourceSlice extends op('SourceSlice').args<{ value: string }>() {
   }
 }
 export class Literal extends op('Literal').args<Pick<AST.Literal, 'type' | 'value'>>() {}
-export class Path extends op('Path').args<{ head: Expr; tail: SourceSlice[] }>() {}
+export class Path extends op('Path').args<{ head: Expr; tail: PresentArray<SourceSlice> }>() {}
 export class GetArg extends op('GetArg').args<{ name: SourceSlice }>() {}
 export class GetThis extends op('GetThis').void() {}
 export class GetVar extends op('GetVar').args<{
@@ -51,7 +52,7 @@ export class SubExpression extends op('SubExpression').args<{
   hash: Hash;
 }>() {}
 
-export class Params extends op('Params').args<{ list: Expr[] }>() {}
+export class Params extends op('Params').args<{ list: Option<PresentArray<Expr>> }>() {}
 export class HashPair extends op('HashPair').args<{ key: SourceSlice; value: Expr }>() {}
 export class Hash extends op('Hash').args<{ pairs: HashPair[] }>() {}
 
@@ -91,7 +92,10 @@ export type ExprTable = OpsTable<Expr>;
 
 // target is really a string literal, but threading that information
 // through is currently too annoying
-export class Yield extends op('Yield').args<{ target: SourceSlice }>() {}
+export class Yield extends op('Yield').args<{
+  target: SourceSlice;
+  params: Params;
+}>() {}
 
 export class Partial extends op('Partial').args<{ expr: Expr }>() {}
 export class Debugger extends op('Debugger').void() {}
@@ -115,7 +119,7 @@ export class BlockInvocation extends op('BlockInvocation').args<{
 }>() {}
 
 export function getBlock(blocks: Block[], name: string): Block | undefined {
-  return blocks.find(block => block.name === name);
+  return blocks.find(block => block.args.name.getString() === name);
 }
 
 export class Block extends op('Block').args<{

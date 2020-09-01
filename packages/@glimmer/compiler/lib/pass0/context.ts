@@ -1,6 +1,6 @@
-import { ExpressionContext } from '@glimmer/interfaces';
+import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
-import { assert, NonemptyStack } from '@glimmer/util';
+import { assert, NonemptyStack, PresentArray, toPresentOption } from '@glimmer/util';
 import { positionToOffset } from '../location';
 import * as pass1 from '../pass1/ops';
 import { SourceOffsets } from '../shared/location';
@@ -102,6 +102,11 @@ export class Context implements ImmutableContext {
     return this.state.cursor();
   }
 
+  template(...args: InputOpArgs<pass1.Template>): UnlocatedOp<pass1.Template> {
+    let factory = new OpFactory<pass1.Template>(this.source);
+    return factory.op(pass1.Template, ...args);
+  }
+
   op<O extends pass1.Statement>(name: OpConstructor<O>, ...args: InputOpArgs<O>): UnlocatedOp<O> {
     return this.opFactory.op(name, ...args);
   }
@@ -163,7 +168,7 @@ export class Context implements ImmutableContext {
       out.push(this.visitExpr(expr, ExpressionContext.Expression));
     }
 
-    let params = this.expr(pass1.Params, { list: out });
+    let params = this.expr(pass1.Params, { list: toPresentOption(out) });
 
     if (isPresent(out)) {
       let first = out[0];
@@ -192,10 +197,22 @@ export class Context implements ImmutableContext {
   }
 
   mapIntoExprs<E extends pass1.Expr, T>(
-    input: [T, ...T[]],
+    input: PresentArray<T>,
     callback: (input: T) => E[]
-  ): [E, ...E[]] {
-    return this.exprFactory.map(input, callback) as [E, ...E[]];
+  ): PresentArray<E>;
+  mapIntoExprs<E extends pass1.Expr, T>(
+    input: Option<PresentArray<T>>,
+    callback: (input: T) => E[]
+  ): Option<PresentArray<E>>;
+  mapIntoExprs<E extends pass1.Expr, T>(
+    input: Option<PresentArray<T>>,
+    callback: (input: T) => E[]
+  ): Option<PresentArray<E>> {
+    if (input === null) {
+      return null;
+    } else {
+      return this.exprFactory.map(input, callback) as PresentArray<E>;
+    }
   }
 
   withBlock<T>(
@@ -213,7 +230,10 @@ export class Context implements ImmutableContext {
     }
   }
 
-  visitExpr(node: AST.Expression, context: ExpressionContext): pass1.Expr {
+  visitExpr(
+    node: AST.Expression,
+    context: ExpressionContext = ExpressionContext.Expression
+  ): pass1.Expr {
     if (node.type === 'PathExpression') {
       return this.helper.pathWithContext(node, context);
     } else {

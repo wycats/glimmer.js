@@ -1,15 +1,15 @@
 import {
+  Expressions,
   MachineOp,
-  Op,
-  StatementCompileActions,
   MacroBlocks,
   MacroInlines,
-  Expressions,
+  Op,
+  StatementCompileActions,
 } from '@glimmer/interfaces';
+import { assert, expect, unwrap, isPresent } from '@glimmer/util';
+import { $fp, $sp } from '@glimmer/vm';
+import { error, op } from '../opcode-builder/encoder';
 import { InvokeStaticBlock, InvokeStaticBlockWithStack } from '../opcode-builder/helpers/blocks';
-import { assert, unwrap } from '@glimmer/util';
-import { $sp, $fp } from '@glimmer/vm';
-import { op, error } from '../opcode-builder/encoder';
 import {
   InvokeDynamicComponent,
   StaticComponentHelper,
@@ -126,7 +126,7 @@ export function populateBuiltins(
           actions = [PushPrimitiveReference(null)];
         }
 
-        actions.push(op('Expr', params[0]));
+        actions.push(op('Expr', expect(params, 'params in #each must exist')[0]));
 
         return { count: 2, actions };
       },
@@ -240,8 +240,8 @@ export function populateBuiltins(
 
     return op('DynamicComponent', {
       definition,
-      attrs: null,
-      params,
+      elementBlock: null,
+      params: isPresent(params) ? params : null,
       args: hash,
       atNames: false,
       blocks,
@@ -263,8 +263,8 @@ export function populateBuiltins(
     let [definition, ...params] = _params!;
     return InvokeDynamicComponent(context.meta, {
       definition,
-      attrs: null,
-      params,
+      elementBlock: null,
+      params: isPresent(params) ? params : null,
       hash,
       atNames: false,
       blocks: EMPTY_BLOCKS,

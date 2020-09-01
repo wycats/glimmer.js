@@ -17,6 +17,6 @@ export interface NonemptyStack<T> {
   size: number;
   push(item: T): void;
   pop(): T;
-  nth(from: number): Option<T>;
+  nthBack(from: number): Option<T>;
   toArray(): T[];
 }

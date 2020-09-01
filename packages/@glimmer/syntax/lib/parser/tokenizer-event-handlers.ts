@@ -347,7 +347,7 @@ interface HandlebarsParseOptions {
 }
 
 export interface PreprocessOptions {
-  meta?: unknown;
+  meta?: object;
   plugins?: {
     ast?: ASTPluginBuilder[];
   };

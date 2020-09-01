@@ -37,7 +37,7 @@ class Pass1Expressions implements Pass1ExpressionsVisitor {
   Concat({ parts }: OpArgs<pass1.Concat>, ctx: Context): pass2.Op[] {
     return ctx.ops(
       ctx.map([...parts].reverse(), part => ctx.visitExpr(part)),
-      ctx.op(pass2.PrepareArray, { entries: parts.length }),
+      ctx.op(pass2.Params, { entries: parts.length }),
       ctx.op(pass2.Concat)
     );
   }
@@ -55,34 +55,29 @@ class Pass1Expressions implements Pass1ExpressionsVisitor {
   }
 
   Params({ list }: OpArgs<pass1.Params>, ctx: Context): pass2.Op[] {
-    if (list.length === 0) {
-      return ctx.ops(ctx.op(pass2.EmptyParams));
-    } else {
+    if (list) {
       return ctx.ops(
-        ctx.map([...list].reverse(), expr => ctx.visitExpr(expr)),
-        ctx.op(pass2.PrepareArray, { entries: list.length })
+        ctx.map(list, expr => ctx.visitExpr(expr)),
+        ctx.op(pass2.Params, { entries: list.length })
       );
+    } else {
+      return ctx.ops(ctx.op(pass2.EmptyParams));
     }
   }
 
   Hash({ pairs }: OpArgs<pass1.Hash>, ctx: Context): pass2.Op[] {
     if (pairs.length === 0) {
-      return [ctx.op(pass2.Literal, { type: 'NullLiteral', value: null })];
+      return ctx.ops(ctx.op(pass2.EmptyHash));
     }
 
     return ctx.ops(
-      ctx.map([...pairs].reverse(), pair => ctx.visitExpr(pair)),
-      ctx.op(pass2.PrepareObject, { entries: pairs.length })
+      ctx.map(pairs, pair => ctx.visitExpr(pair)),
+      ctx.op(pass2.Hash, { entries: pairs.length })
     );
   }
 
   HashPair({ key, value }: OpArgs<pass1.HashPair>, ctx: Context): pass2.Op[] {
-    return ctx.ops(
-      ctx.visitExpr(value),
-      ctx
-        .unlocatedOp(pass2.Literal, { type: 'StringLiteral', value: key.name })
-        .offsets(key.offsets)
-    );
+    return ctx.ops(ctx.visitExpr(value), ctx.op(pass2.HashPair, { key }));
   }
 
   Literal({ type, value }: OpArgs<pass1.Literal>, ctx: Context): pass2.Op {

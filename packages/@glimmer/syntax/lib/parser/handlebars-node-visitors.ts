@@ -63,11 +63,7 @@ export abstract class HandlebarsNodeVisitors extends Parser {
       return;
     }
 
-    if (
-      this.tokenizer['state'] !== 'comment' &&
-      this.tokenizer['state'] !== 'data' &&
-      this.tokenizer['state'] !== 'beforeData'
-    ) {
+    if (this.tokenizer['state'] !== 'data' && this.tokenizer['state'] !== 'beforeData') {
       throw new SyntaxError(
         'A block may only be used inside an HTML element or another block.',
         block.loc

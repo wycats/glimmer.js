@@ -1,23 +1,27 @@
-import { AST, SyntaxError } from '@glimmer/syntax';
 import * as pass2 from '../pass2/ops';
 import { CompilerContext, Context } from './context';
-import { STATEMENTS } from './statements';
 import { EXPRESSIONS } from './expressions';
 import * as pass1 from './ops';
+import { STATEMENTS } from './statements';
 
-export function visit(source: string, root: pass1.Template): pass2.Op[] {
-  let compilerContext = new CompilerContext(source, {
+export function visit(source: string, root: pass1.Template): pass2.Template {
+  let symbols = root.args.symbols;
+
+  let compilerContext = new CompilerContext(source, symbols, {
     expressions: EXPRESSIONS,
     statements: STATEMENTS,
   });
 
   let ctx = compilerContext.forOffsets(root.offsets);
+  let statements = ctx.map(root.args.body, stmt => {
+    console.log(`pass1: visiting`, stmt);
+    return ctx.visitStmt(stmt);
+  });
 
-  return ctx.ops(
-    ctx.op(pass2.StartProgram, root.args.symbols),
-    ctx.map(root.args.body, stmt => ctx.visitStmt(stmt)),
-    ctx.op(pass2.EndProgram)
-  );
+  let ops = ctx.ops(ctx.op(pass2.StartProgram), statements, ctx.op(pass2.EndProgram));
+  console.log(`pass1`, symbols);
+
+  return ctx.template({ symbols, ops }).offsets(root.offsets);
 }
 
 /**
@@ -46,21 +50,4 @@ export class CompilerHelper {
   args({ params, hash }: { params: pass1.Params; hash: pass1.Hash }): pass2.Op[] {
     return this.ctx.ops(this.visitExpr(hash), this.visitExpr(params));
   }
-}
-
-function assertValidArgumentName(
-  attribute: AST.AttrNode,
-  isComponent: boolean,
-  elementNode: AST.ElementNode
-) {
-  if (!isComponent && attribute.name[0] === '@') {
-    throw new SyntaxError(
-      `${attribute.name} is not a valid attribute name. @arguments are only allowed on components, but the tag for this element (\`${elementNode.tag}\`) is a regular, non-component HTML element.`,
-      attribute.loc
-    );
-  }
-}
-
-function isTrustedValue(value: any) {
-  return value.escaped !== undefined && !value.escaped;
 }

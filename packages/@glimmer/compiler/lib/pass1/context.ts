@@ -3,7 +3,7 @@ import * as pass2 from '../pass2/ops';
 import { SourceOffsets } from '../shared/location';
 import { InputOpArgs, Op, OpArgs, OpConstructor, UnlocatedOp } from '../shared/op';
 import { OpFactory, Ops } from '../shared/ops';
-import { SymbolTable } from '../shared/symbol-table';
+import { ProgramSymbolTable, SymbolTable } from '../shared/symbol-table';
 import { CompilerHelper } from './index';
 import * as pass1 from './ops';
 
@@ -11,8 +11,12 @@ import * as pass1 from './ops';
  * This is the mutable state for this compiler pass.
  */
 export class CompilerState {
-  readonly symbols: NonemptyStack<SymbolTable> = new NonemptyStack([SymbolTable.top()]);
+  readonly symbols: NonemptyStack<SymbolTable>;
   private cursorCount = 0;
+
+  constructor(readonly top: ProgramSymbolTable) {
+    this.symbols = new NonemptyStack([top]);
+  }
 
   cursor() {
     return `%cursor:${this.cursorCount++}%`;
@@ -49,11 +53,16 @@ export interface Pass1Visitor {
 }
 
 export class CompilerContext {
-  readonly state = new CompilerState();
+  readonly state: CompilerState;
   readonly factory: OpFactory<pass2.Op>;
 
-  constructor(readonly source: string, readonly visitor: Pass1Visitor) {
+  constructor(
+    readonly source: string,
+    symbols: ProgramSymbolTable,
+    readonly visitor: Pass1Visitor
+  ) {
     this.factory = new OpFactory(source);
+    this.state = new CompilerState(symbols);
   }
 
   forOffsets(offsets: SourceOffsets | null): Context {
@@ -79,12 +88,22 @@ export class Context {
     return this.ctx.state.symbols;
   }
 
+  get templateSymbols(): ProgramSymbolTable {
+    return this.symbols.nth(0) as ProgramSymbolTable;
+  }
+
   get table() {
     return this.symbols.current;
   }
 
   cursor(): string {
     return this.ctx.state.cursor();
+  }
+
+  template(...args: InputOpArgs<pass2.Template>): UnlocatedOp<pass2.Template> {
+    let factory = new OpFactory<pass2.Template>(this.ctx.source);
+
+    return factory.op(pass2.Template, ...args);
   }
 
   op<O extends pass2.Op>(name: OpConstructor<O>, ...args: InputOpArgs<O>): O {

@@ -100,6 +100,9 @@
     "toml": "^3.0.0",
     "typescript": "^4.0.2"
   },
+  "resolutions": {
+    "typescript": "^4.0.2"
+  },
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
   },
@@ -148,7 +151,7 @@
   },
   "volta": {
     "node": "12.18.3",
-    "yarn": "1.22.4"
+    "yarn": "1.22.5"
   },
   "ember-addon": {
     "paths": [

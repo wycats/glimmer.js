@@ -1,8 +1,9 @@
 import { AST, builders, SyntaxError } from '@glimmer/syntax';
-import { ExpressionContext } from '../../../interfaces';
+import { ExpressionContext, Option } from '@glimmer/interfaces';
 import * as pass1 from '../pass1/ops';
 import { Context, ImmutableContext } from './context';
 import { HelperBlock, HelperExpression, HelperStatement, isPresent } from './is-node';
+import { mapPresent, PresentArray, toPresentOption } from '@glimmer/util';
 
 interface KeywordPathNode<K extends string> extends AST.PathExpression {
   original: K;
@@ -131,8 +132,11 @@ export const IN_ELEMENT = new KeywordBlock('in-element', {
 });
 
 export const YIELD = new KeywordStatement('yield', {
-  assert(statement: KeywordStatementNode<'yield'>): { target: AST.StringLiteral } {
+  assert(
+    statement: KeywordStatementNode<'yield'>
+  ): { target: AST.StringLiteral; params: Option<PresentArray<AST.Expression>> } {
     let { pairs } = statement.hash;
+    let params = toPresentOption(statement.params);
 
     if (isPresent(pairs)) {
       let first = pairs[0];
@@ -147,18 +151,27 @@ export const YIELD = new KeywordStatement('yield', {
         throw new SyntaxError(`you can only yield to a literal value`, target.loc);
       }
 
-      return { target };
+      return { target, params };
     } else {
-      return { target: builders.string('default') };
+      return { target: builders.string('default'), params };
     }
   },
 
   translate(
     statement: KeywordStatementNode<'yield'>,
     ctx: Context,
-    { target }: { target: AST.StringLiteral }
+    {
+      target,
+      params: astParams,
+    }: { target: AST.StringLiteral; params: Option<PresentArray<AST.Expression>> }
   ): pass1.Statement {
-    return ctx.op(pass1.Yield, { target: ctx.slice(target.value).loc(target) }).loc(statement);
+    let params = mapPresent(astParams, expr => ctx.visitExpr(expr));
+    return ctx
+      .op(pass1.Yield, {
+        target: ctx.slice(target.value).loc(target),
+        params: ctx.expr(pass1.Params, { list: params }).loc(astParams),
+      })
+      .loc(statement);
   },
 });
 

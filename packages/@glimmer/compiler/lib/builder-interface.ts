@@ -1,5 +1,5 @@
 import { Dict, Option } from '@glimmer/interfaces';
-import { dict, assertNever, expect } from '@glimmer/util';
+import { dict, assertNever, expect, PresentArray, isPresent } from '@glimmer/util';
 
 export type BuilderParams = BuilderExpression[];
 export type BuilderHash = Option<Dict<BuilderExpression>>;
@@ -53,8 +53,8 @@ export interface Variable {
 }
 
 export interface Path {
-  variable: Variable;
-  tail: string[];
+  head: Variable;
+  tail: PresentArray<string>;
 }
 
 export interface AppendExpr {
@@ -65,21 +65,21 @@ export interface AppendExpr {
 
 export interface AppendPath {
   kind: HeadKind.AppendPath;
-  path: Path;
+  path: NormalizedPath;
   trusted: boolean;
 }
 
 export type NormalizedStatement =
   | {
       kind: HeadKind.Call;
-      path: Path;
+      head: NormalizedHead;
       params: Option<NormalizedParams>;
       hash: Option<NormalizedHash>;
       trusted: boolean;
     }
   | {
       kind: HeadKind.Block;
-      path: Path;
+      head: NormalizedHead;
       params: Option<NormalizedParams>;
       hash: Option<NormalizedHash>;
       blockParams: Option<string[]>;
@@ -113,13 +113,28 @@ export function normalizeStatement(statement: BuilderStatement): NormalizedState
       return normalizeVerboseStatement(statement);
     }
   } else if (typeof statement === 'string') {
-    return {
-      kind: HeadKind.AppendPath,
-      path: normalizeDottedPath(statement),
-      trusted: false,
-    };
+    return normalizeAppendHead(normalizeDottedPath(statement), false);
   } else {
     throw assertNever(statement);
+  }
+}
+
+export function normalizeAppendHead(
+  head: NormalizedHead,
+  trusted: boolean
+): AppendExpr | AppendPath {
+  if (head.type === ExpressionKind.GetPath) {
+    return {
+      kind: HeadKind.AppendPath,
+      path: head,
+      trusted,
+    };
+  } else {
+    return {
+      kind: HeadKind.AppendExpr,
+      expr: head,
+      trusted,
+    };
   }
 }
 
@@ -163,7 +178,7 @@ export function normalizeSugaryArrayStatement(
 
       return {
         kind: HeadKind.Call,
-        path: normalizeCallHead(name),
+        head: normalizeCallHead(name),
         params,
         hash,
         trusted: false,
@@ -177,7 +192,7 @@ export function normalizeSugaryArrayStatement(
 
       return {
         kind: HeadKind.Block,
-        path,
+        head: path,
         params,
         hash,
         blocks,
@@ -252,7 +267,7 @@ function normalizeVerboseStatement(statement: VerboseStatement): NormalizedState
   }
 }
 
-function extractBlockHead(name: string): Path {
+function extractBlockHead(name: string): NormalizedHead {
   let result = name.match(/^#(.*)$/);
 
   if (result === null) {
@@ -262,7 +277,7 @@ function extractBlockHead(name: string): Path {
   return normalizeDottedPath(result[1]);
 }
 
-function normalizeCallHead(name: string): Path {
+function normalizeCallHead(name: string): NormalizedHead {
   let result = name.match(/^\((.*)\)$/);
 
   if (result === null) {
@@ -272,31 +287,37 @@ function normalizeCallHead(name: string): Path {
   return normalizeDottedPath(result[1]);
 }
 
-function normalizePath(head: string, tail: string[] = []): Path {
+function normalizePath(head: string, tail: string[] = []): NormalizedHead {
   let pathHead = normalizePathHead(head);
 
-  return {
-    variable: pathHead,
-    tail,
-  };
+  if (isPresent(tail)) {
+    return {
+      type: ExpressionKind.GetPath,
+      path: {
+        head: pathHead,
+        tail,
+      },
+    };
+  } else {
+    return {
+      type: ExpressionKind.GetVar,
+      variable: pathHead,
+    };
+  }
 }
 
-function normalizeDottedPathExpression(whole: string): { type: ExpressionKind.Get; path: Path } {
-  return { type: ExpressionKind.Get, path: normalizeDottedPath(whole) };
-}
-
-function normalizeDottedPath(whole: string): Path {
+function normalizeDottedPath(whole: string): NormalizedHead {
   let { kind, name: rest } = normalizePathHead(whole);
 
   let [name, ...tail] = rest.split('.');
 
-  return {
-    variable: {
-      kind,
-      name,
-    },
-    tail,
-  };
+  let variable: Variable = { kind, name };
+
+  if (isPresent(tail)) {
+    return { type: ExpressionKind.GetPath, path: { head: variable, tail } };
+  } else {
+    return { type: ExpressionKind.GetVar, variable };
+  }
 }
 
 export function normalizePathHead(whole: string): Variable {
@@ -340,7 +361,7 @@ export type BuilderBlockStatement =
   | [string, BuilderParams, BuilderBlockHash, BuilderBlock | BuilderBlocks];
 
 export interface NormalizedBuilderBlockStatement {
-  head: Path;
+  head: NormalizedHead;
   params: Option<NormalizedParams>;
   hash: Option<NormalizedHash>;
   blockParams: Option<string[]>;
@@ -540,7 +561,8 @@ type Hash = Dict<BuilderExpression>;
 export const enum ExpressionKind {
   Literal = 'Literal',
   Call = 'Call',
-  Get = 'Get',
+  GetPath = 'GetPath',
+  GetVar = 'GetVar',
   Concat = 'Concat',
   HasBlock = 'HasBlock',
   HasBlockParams = 'HasBlockParams',
@@ -548,15 +570,22 @@ export const enum ExpressionKind {
 
 export interface NormalizedCallExpression {
   type: ExpressionKind.Call;
-  path: Path;
+  head: NormalizedHead;
   params: Option<NormalizedParams>;
   hash: Option<NormalizedHash>;
 }
 
 export interface NormalizedPath {
-  type: ExpressionKind.Get;
+  type: ExpressionKind.GetPath;
   path: Path;
 }
+
+export interface NormalizedVar {
+  type: ExpressionKind.GetVar;
+  variable: Variable;
+}
+
+export type NormalizedHead = NormalizedPath | NormalizedVar;
 
 export interface NormalizedConcat {
   type: ExpressionKind.Concat;
@@ -570,6 +599,7 @@ export type NormalizedExpression =
     }
   | NormalizedCallExpression
   | NormalizedPath
+  | NormalizedVar
   | NormalizedConcat
   | {
       type: ExpressionKind.HasBlock;
@@ -591,7 +621,7 @@ export function normalizeAppendExpression(
         value: expression,
       },
       kind: HeadKind.AppendExpr,
-      trusted: true,
+      trusted: false,
     };
   } else if (Array.isArray(expression)) {
     switch (expression[0]) {
@@ -599,18 +629,11 @@ export function normalizeAppendExpression(
         return {
           expr: { type: ExpressionKind.Literal, value: expression[1] },
           kind: HeadKind.AppendExpr,
-          trusted: true,
+          trusted: false,
         };
 
       case Builder.Get: {
-        let path = normalizePath(expression[1], expression[2]);
-        let expr: NormalizedExpression = { type: ExpressionKind.Get, path };
-
-        if (path.tail.length === 0) {
-          return { path, kind: HeadKind.AppendPath, trusted: forceTrusted };
-        } else {
-          return { expr, kind: HeadKind.AppendExpr, trusted: forceTrusted };
-        }
+        return normalizeAppendHead(normalizePath(expression[1], expression[2]), forceTrusted);
       }
       case Builder.Concat: {
         let expr: NormalizedConcat = {
@@ -668,21 +691,7 @@ export function normalizeAppendExpression(
   } else if (typeof expression !== 'object') {
     switch (typeof expression) {
       case 'string': {
-        let expr = normalizeDottedPathExpression(expression);
-
-        if (expr.path.tail.length === 0) {
-          return {
-            path: expr.path,
-            kind: HeadKind.AppendPath,
-            trusted: forceTrusted,
-          };
-        } else {
-          return {
-            expr,
-            kind: HeadKind.AppendExpr,
-            trusted: forceTrusted,
-          };
-        }
+        return normalizeAppendHead(normalizeDottedPath(expression), forceTrusted);
       }
       case 'boolean':
       case 'number':
@@ -712,10 +721,7 @@ export function normalizeExpression(expression: BuilderExpression): NormalizedEx
         return { type: ExpressionKind.Literal, value: expression[1] };
 
       case Builder.Get: {
-        let path = normalizePath(expression[1], expression[2]);
-        let expr: NormalizedExpression = { type: ExpressionKind.Get, path };
-
-        return expr;
+        return normalizePath(expression[1], expression[2]);
       }
       case Builder.Concat: {
         let expr: NormalizedConcat = {
@@ -757,7 +763,7 @@ export function normalizeExpression(expression: BuilderExpression): NormalizedEx
   } else if (typeof expression !== 'object') {
     switch (typeof expression) {
       case 'string': {
-        return normalizeDottedPathExpression(expression);
+        return normalizeDottedPath(expression);
       }
       case 'boolean':
       case 'number':
@@ -859,7 +865,7 @@ export function normalizeCallExpression(expr: BuilderCallExpression): Normalized
     case 1:
       return {
         type: ExpressionKind.Call,
-        path: normalizeCallHead(expr[0]),
+        head: normalizeCallHead(expr[0]),
         params: null,
         hash: null,
       };
@@ -867,14 +873,14 @@ export function normalizeCallExpression(expr: BuilderCallExpression): Normalized
       if (Array.isArray(expr[1])) {
         return {
           type: ExpressionKind.Call,
-          path: normalizeCallHead(expr[0]),
+          head: normalizeCallHead(expr[0]),
           params: normalizeParams(expr[1]),
           hash: null,
         };
       } else {
         return {
           type: ExpressionKind.Call,
-          path: normalizeCallHead(expr[0]),
+          head: normalizeCallHead(expr[0]),
           params: null,
           hash: normalizeHash(expr[1]),
         };
@@ -884,7 +890,7 @@ export function normalizeCallExpression(expr: BuilderCallExpression): Normalized
     case 3:
       return {
         type: ExpressionKind.Call,
-        path: normalizeCallHead(expr[0]),
+        head: normalizeCallHead(expr[0]),
         params: normalizeParams(expr[1]),
         hash: normalizeHash(expr[2]),
       };

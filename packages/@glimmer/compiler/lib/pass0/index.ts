@@ -1,9 +1,8 @@
 import { ExpressionContext } from '@glimmer/interfaces';
 import { AST, SyntaxError } from '@glimmer/syntax';
-import { assertNever } from '@glimmer/util';
+import { assertNever, assertPresent, assign, mapPresent } from '@glimmer/util';
 import * as pass1 from '../pass1/ops';
 import { ProgramSymbolTable } from '../shared/symbol-table';
-import { assertPresent } from '../shared/utils';
 import { getAttrNamespace } from '../utils';
 import { Context, offsetsForHashKey, paramsOffsets } from './context';
 import { EXPRESSIONS } from './expressions';
@@ -18,15 +17,21 @@ import {
 import { HAS_BLOCK, HAS_BLOCK_PARAMS } from './keywords';
 import { STATEMENTS } from './statements';
 
-export function visit(source: string, root: AST.Template): pass1.Statement[] {
+export function visit(source: string, root: AST.Template): pass1.Template {
   let ctx = new Context(source, {
     expressions: EXPRESSIONS,
     statements: STATEMENTS,
   });
 
-  root.symbols = ctx.symbols.current as ProgramSymbolTable;
+  let symbols = ctx.symbols.current as ProgramSymbolTable;
+  let body = ctx.mapIntoStatements(root.body, stmt => ctx.visitStmt(stmt));
 
-  return ctx.mapIntoStatements(root.body, stmt => ctx.visitStmt(stmt));
+  console.groupCollapsed(`pass0: visiting`);
+  console.log('symbols', symbols);
+  console.log('source', source);
+  console.groupEnd();
+
+  return ctx.template({ symbols, body }).loc(root.loc);
 }
 
 /**
@@ -121,7 +126,7 @@ export class CompilerHelper {
     let offsets = paramsOffsets({ path, params: list }, this.ctx.source);
 
     if (!isPresent(list)) {
-      return this.ctx.expr(pass1.Params, { list: [] }).offsets(offsets);
+      return this.ctx.expr(pass1.Params, { list: null }).offsets(offsets);
     }
 
     return this.ctx
@@ -181,10 +186,15 @@ export class CompilerHelper {
 
       return {
         expr: this.ctx
-          .expr(pass1.SubExpression, {
-            head: this.ctx.visitExpr(value.path, ExpressionContext.CallHead),
-            ...this.args(value),
-          })
+          .expr(
+            pass1.SubExpression,
+            assign(
+              {
+                head: this.ctx.visitExpr(value.path, ExpressionContext.CallHead),
+              },
+              this.args(value)
+            )
+          )
           .loc(value),
         isStatic: false,
       };
@@ -237,12 +247,12 @@ export class CompilerHelper {
   }
 
   path(head: pass1.Expr, tail: string[], node: AST.BaseNode): pass1.Expr {
-    if (tail.length === 0) {
-      return head;
-    } else {
+    if (isPresent(tail)) {
       return this.ctx
-        .expr(pass1.Path, { head, tail: tail.map(e => this.ctx.slice(e).offsets(null)) })
+        .expr(pass1.Path, { head, tail: mapPresent(tail, e => this.ctx.slice(e).offsets(null)) })
         .loc(node);
+    } else {
+      return head;
     }
   }
 

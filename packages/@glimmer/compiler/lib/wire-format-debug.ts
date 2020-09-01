@@ -5,7 +5,7 @@ import {
   SerializedInlineBlock,
   SerializedTemplateBlock,
 } from '@glimmer/interfaces';
-import { dict, exhausted } from '@glimmer/util';
+import { dict, exhausted, assert } from '@glimmer/util';
 import { inflateAttrName, inflateTagName } from './utils';
 
 export default class WireFormatDebugger {
@@ -163,46 +163,32 @@ export default class WireFormatDebugger {
         case Op.Concat:
           return ['concat', this.formatParams(opcode[1] as WireFormat.Core.Params)];
 
-        case Op.GetExprPath:
+        case Op.GetPath:
           return ['get-expr-path', this.formatOpcode(opcode[1]), opcode[2]];
 
-        default: {
-          let [op, sym, path] = opcode;
-          let opName: string;
-          let varName: string;
-          if (op === Op.GetSymbol) {
-            varName = this.program.symbols[sym];
-            opName = 'get-symbol';
-          } else {
-            varName = this.program.upvars[sym];
-            switch (op) {
-              case Op.GetFree:
-                opName = 'get-free';
-                break;
-              case Op.GetFreeInAppendSingleId:
-                opName = 'get-free-in-append-single-id';
-                break;
-              case Op.GetFreeInBlockHead:
-                opName = 'get-free-in-block-head';
-                break;
-              case Op.GetFreeInCallHead:
-                opName = 'get-free-in-call-head';
-                break;
-              case Op.GetFreeInComponentHead:
-                opName = 'get-free-in-component-head';
-                break;
-              case Op.GetFreeInExpression:
-                opName = 'get-free-in-expression';
-                break;
-              case Op.GetFreeInModifierHead:
-                opName = 'get-free-in-modifier-head';
-                break;
-              default:
-                return exhausted(op);
-            }
-          }
-          return path ? [opName, varName, path] : [opName, varName];
-        }
+        case Op.GetFree:
+          return ['get-free', this.program.upvars[opcode[1]]];
+
+        case Op.GetFreeInAppendSingleId:
+          return ['get-free-in-append-single-id', this.program.upvars[opcode[1]]];
+
+        case Op.GetFreeInBlockHead:
+          return ['get-free-in-block-head', this.program.upvars[opcode[1]]];
+
+        case Op.GetFreeInCallHead:
+          return ['get-free-in-call-head', this.program.upvars[opcode[1]]];
+
+        case Op.GetFreeInComponentHead:
+          return ['get-free-in-component-head', this.program.upvars[opcode[1]]];
+
+        case Op.GetFreeInExpression:
+          return ['get-free-in-expression-head', this.program.upvars[opcode[1]]];
+
+        case Op.GetFreeInModifierHead:
+          return ['get-free-in-modifier-head', this.program.upvars[opcode[1]]];
+
+        case Op.GetSymbol:
+          return ['get-symbol', this.program.upvars[opcode[1]]];
       }
     } else {
       return opcode;

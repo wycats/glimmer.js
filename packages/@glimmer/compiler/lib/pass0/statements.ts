@@ -1,5 +1,6 @@
 import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST, isLiteral, SourceLocation } from '@glimmer/syntax';
+import { assign } from '@glimmer/util';
 import * as pass1 from '../pass1/ops';
 import { BlockSymbolTable, SymbolTable } from '../shared/symbol-table';
 import { Context, Pass0Visitor } from './context';
@@ -19,16 +20,21 @@ class Pass0Statements implements Pass0StatementsVisitor {
     } else {
       let defaultBlock = ctx.visitBlock(ctx.slice('default').offsets(null), block.program);
       let inverseBlock = block.inverse
-        ? [ctx.visitBlock(ctx.slice('inverse').offsets(null), block.inverse)]
+        ? [ctx.visitBlock(ctx.slice('else').offsets(null), block.inverse)]
         : [];
       let blocks = [defaultBlock, ...inverseBlock];
 
       return ctx
-        .op(pass1.BlockInvocation, {
-          head: ctx.visitExpr(block.path, ExpressionContext.BlockHead),
-          ...ctx.helper.args(block),
-          blocks,
-        })
+        .op(
+          pass1.BlockInvocation,
+          assign(
+            {
+              head: ctx.visitExpr(block.path, ExpressionContext.BlockHead),
+            },
+            ctx.helper.args(block),
+            { blocks }
+          )
+        )
         .loc(block);
     }
   }
@@ -114,10 +120,15 @@ class Pass0Statements implements Pass0StatementsVisitor {
     return ctx
       .append(
         ctx
-          .expr(pass1.SubExpression, {
-            head: ctx.visitExpr(mustache.path, ExpressionContext.CallHead),
-            ...ctx.helper.args(mustache),
-          })
+          .expr(
+            pass1.SubExpression,
+            assign(
+              {
+                head: ctx.visitExpr(mustache.path, ExpressionContext.CallHead),
+              },
+              ctx.helper.args(mustache)
+            )
+          )
           .loc(mustache),
         {
           trusted: !mustache.escaped,

@@ -1,21 +1,20 @@
 import { ExpressionContext, SexpOpcodes as WireOp } from '@glimmer/interfaces';
-import { exhausted } from '@glimmer/util';
-import { Visitors } from './visitors';
+import { assert, exhausted, isPresent, mapPresent } from '@glimmer/util';
 import { OpArgs } from '../shared/op';
-import { CONCAT_PARAMS, EXPR, GET, HASH, PARAMS, STRING } from './checks';
+import { Visitors } from '../shared/visitors';
+import { CONCAT_PARAMS, EXPR, GET, HASH, HASH_PAIR, PARAMS } from './checks';
 import { Context } from './context';
 import * as pass2 from './ops';
 import * as out from './out';
-import { isPresent } from '../shared/utils';
 
-class InternalVisitors implements Visitors<pass2.InternalTable> {
-  PrepareArray(ctx: Context, { entries }: OpArgs<pass2.PrepareArray>): void {
+class InternalVisitors implements Visitors<pass2.InternalTable, void> {
+  Params(ctx: Context, { entries }: OpArgs<pass2.Params>): void {
     ctx.assertStackHas(entries);
 
     let values: out.Expr[] = [];
 
     for (let i = 0; i < entries; i++) {
-      values.push(ctx.popValue(EXPR));
+      values.unshift(ctx.popValue(EXPR));
     }
 
     if (isPresent(values)) {
@@ -29,19 +28,21 @@ class InternalVisitors implements Visitors<pass2.InternalTable> {
     ctx.pushValue(out.EmptyParams);
   }
 
-  PrepareObject(ctx: Context, { entries }: OpArgs<pass2.PrepareObject>): void {
-    if (entries === 0) {
-      ctx.pushValue(out.EmptyHash);
-    }
+  HashPair(ctx: Context, { key }: OpArgs<pass2.HashPair>): void {
+    let value = ctx.popValue(EXPR);
+
+    ctx.pushValue(out.HashPair, { key: ctx.slice(key), value });
+  }
+
+  Hash(ctx: Context, { entries }: OpArgs<pass2.Hash>): void {
+    assert(entries >= 1, `pass2.Hash must have at least one entry (use pass2.EmptyHash)`);
 
     ctx.assertStackHas(entries);
 
     let pairs: out.HashPair[] = [];
 
     for (let i = 0; i < entries; i++) {
-      let key = ctx.popValue(STRING);
-      let value = ctx.popValue(EXPR);
-      pairs.push(ctx.stackValue(out.HashPair, { key, value }));
+      pairs.unshift(ctx.popValue(HASH_PAIR));
     }
 
     if (isPresent(pairs)) {
@@ -50,9 +51,19 @@ class InternalVisitors implements Visitors<pass2.InternalTable> {
       ctx.pushValue(out.EmptyHash);
     }
   }
+
+  EmptyHash(ctx: Context): void {
+    ctx.pushValue(out.EmptyHash);
+  }
 }
 
-class ExpressionVisitors implements Visitors<pass2.ExprTable> {
+export const INTERNAL: Visitors<pass2.InternalTable, void> = new InternalVisitors();
+
+export function isInternal(input: pass2.Op): input is pass2.Internal {
+  return input.name in INTERNAL;
+}
+
+class ExpressionVisitors implements Visitors<pass2.ExprTable, void> {
   Literal(ctx: Context, { value }: OpArgs<pass2.Literal>): void {
     if (value === undefined) {
       ctx.pushValue(out.Undefined);
@@ -83,7 +94,10 @@ class ExpressionVisitors implements Visitors<pass2.ExprTable> {
 
   GetPath(ctx: Context, tail: OpArgs<pass2.GetPath>): void {
     let head = ctx.popValue(GET);
-    ctx.pushValue(out.GetPath, { head, tail });
+    ctx.pushValue(out.GetPath, {
+      head,
+      tail: mapPresent(tail, t => ctx.op(out.SourceSlice, t)),
+    });
   }
 
   Concat(ctx: Context): void {
@@ -97,6 +111,12 @@ class ExpressionVisitors implements Visitors<pass2.ExprTable> {
 
     ctx.pushValue(out.Call, { head, params, hash });
   }
+}
+
+export const EXPRESSIONS: Visitors<pass2.ExprTable, void> = new ExpressionVisitors();
+
+export function isExpr(input: pass2.Op): input is pass2.Expr {
+  return input.name in EXPRESSIONS;
 }
 
 export function expressionContextOp(context: ExpressionContext) {
@@ -117,5 +137,3 @@ export function expressionContextOp(context: ExpressionContext) {
       return exhausted(context);
   }
 }
-
-export const EXPRESSIONS = new ExpressionVisitors();

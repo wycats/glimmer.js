@@ -1,13 +1,15 @@
-import { Expressions, SexpOpcodes as op, WellKnownAttrName, WireFormat } from '@glimmer/interfaces';
-import { WireFormat as wire } from '@glimmer/interfaces';
-
-import { SourceSlice } from '../pass1/ops';
+import {
+  Expressions,
+  SexpOpcodes as op,
+  WellKnownAttrName,
+  WireFormat as wire,
+} from '@glimmer/interfaces';
+import { assertPresent } from '@glimmer/util';
+import * as pass1 from '../pass1/ops';
 import { SourceOffsets } from '../shared/location';
 import { Op as AbstractOp } from '../shared/op';
-import { ProgramSymbolTable } from '../shared/symbol-table';
-import { assertPresent } from '../shared/utils';
 import { deflateAttrName } from '../utils';
-import { ComponentBlock, NamedBlock, Template } from './blocks';
+import { ComponentBlock, NamedBlock } from './blocks';
 
 /** ENCODABLE */
 
@@ -19,17 +21,6 @@ interface EncodableOp<
   readonly name: N;
   readonly args: Args;
   encode(): Wire;
-}
-
-interface RestrictedOp<Wire extends wire.SyntaxWithInternal> {
-  <N extends string, W extends Wire, Args>(
-    name: N,
-    encode: (args: Args) => W
-  ): EncodableOpConstructor<N, W, Args extends void ? void : Args>;
-}
-
-function restrictedOp<Wire extends wire.SyntaxWithInternal>(): RestrictedOp<Wire> {
-  return ((name, encode) => out(name, encode)) as RestrictedOp<Wire>;
 }
 
 function out<N extends string, Wire extends wire.SyntaxWithInternal, Args>(
@@ -149,7 +140,11 @@ export class Hash extends out(
 export class HashPair extends out('HashPair', (args: { key: SourceSlice; value: Expr }): [
   string,
   wire.Expression
-] => [args.key.getString(), args.value.encode()]) {}
+] => [args.key.encode(), args.value.encode()]) {}
+
+export class SourceSlice extends out('SourceSlice', (args: pass1.SourceSlice): string =>
+  args.getString()
+) {}
 
 export class EmptyHash extends out('EmptyHash', (): null => null) {}
 
@@ -178,10 +173,10 @@ export class GetContextualFree extends expr(
 
 export class GetPath extends expr(
   'GetPath',
-  (args: { head: Expr; tail: SourceSlice[] }): wire.Expressions.GetExprPath => [
-    op.GetExprPath,
+  (args: { head: Expr; tail: [SourceSlice, ...SourceSlice[]] }): wire.Expressions.GetPath => [
+    op.GetPath,
     args.head.encode(),
-    args.tail.map(t => t.getString()),
+    args.tail.map(t => t.encode()) as [string, ...string[]],
   ]
 ) {}
 
@@ -202,11 +197,17 @@ export class Call extends expr(
 
 export class HasBlock extends expr(
   'HasBlock',
-  (args: { symbol: number }): wire.Expressions.HasBlock => [op.HasBlock, args.symbol]
+  (args: { symbol: number }): wire.Expressions.HasBlock => [
+    op.HasBlock,
+    [op.GetSymbol, args.symbol],
+  ]
 ) {}
 export class HasBlockParams extends expr(
   'HasBlockParams',
-  (args: { symbol: number }): wire.Expressions.HasBlockParams => [op.HasBlockParams, args.symbol]
+  (args: { symbol: number }): wire.Expressions.HasBlockParams => [
+    op.HasBlockParams,
+    [op.GetSymbol, args.symbol],
+  ]
 ) {}
 
 /** strict mode */
@@ -244,7 +245,7 @@ export class Append extends stmt(
 
 export class AppendComment extends stmt(
   'AppendComment',
-  (args: { value: SourceSlice }): wire.Statements.Comment => [op.Comment, args.value.getString()]
+  (args: { value: SourceSlice }): wire.Statements.Comment => [op.Comment, args.value.encode()]
 ) {}
 
 export class Debugger extends stmt(
@@ -329,24 +330,24 @@ export class StaticArg extends stmt(
   'StaticArg',
   (args: { name: SourceSlice; value: Expr }): wire.Statements.StaticArg => [
     op.StaticArg,
-    args.name.getString(),
+    args.name.encode(),
     args.value.encode(),
   ]
 ) {
   encodeHash(): [key: string, value: wire.Expression] {
-    return [this.args.name.getString(), this.args.value.encode()];
+    return [this.args.name.encode(), this.args.value.encode()];
   }
 }
 export class DynamicArg extends stmt(
   'DynamicArg',
   (args: { name: SourceSlice; value: Expr }): wire.Statements.DynamicArg => [
     op.DynamicArg,
-    args.name.getString(),
+    args.name.encode(),
     args.value.encode(),
   ]
 ) {
   encodeHash(): [key: string, value: wire.Expression] {
-    return [this.args.name.getString(), this.args.value.encode()];
+    return [this.args.name.encode(), this.args.value.encode()];
   }
 }
 
@@ -357,25 +358,35 @@ export function isArg(statement: Stmt): statement is Arg {
 }
 
 /** -- attributes -- */
-interface AttrArgs {
+export interface AttrArgs {
   name: SourceSlice;
   value: Expr;
   namespace?: string;
 }
 
-type AttrFor<N extends wire.Attribute[0], A extends wire.Attribute = wire.Attribute> = A extends {
-  0: N;
-}
-  ? A
-  : never;
+type AttrFor<N extends wire.Attribute[0]> = [
+  N,
+  string | WellKnownAttrName,
+  wire.Expression,
+  string?
+];
 
 function attr<N extends wire.Attribute[0]>(op: N): (args: AttrArgs) => AttrFor<N> {
-  return args =>
-    [op, deflateAttrName(args.name.getString()), args.value.encode(), args.namespace] as AttrFor<N>;
+  return args => {
+    let name = deflateAttrName(args.name.encode());
+    if (args.namespace) {
+      return [op, name, args.value.encode(), args.namespace] as AttrFor<N>;
+    } else {
+      return [op, name, args.value.encode()] as AttrFor<N>;
+    }
+  };
 }
 
 export class StaticAttr extends stmt('StaticAttr', attr(op.StaticAttr)) {}
-export class StaticComponentAttr extends stmt('StaticComponentAttr', attr(op.StaticAttr)) {}
+export class StaticComponentAttr extends stmt(
+  'StaticComponentAttr',
+  attr(op.StaticComponentAttr)
+) {}
 export class ComponentAttr extends stmt('ComponentAttr', attr(op.ComponentAttr)) {}
 export class TrustingComponentAttr extends stmt(
   'TrustingComponentAttr',
@@ -443,17 +454,14 @@ export class Modifier extends stmt(
 
 export class OpenElement extends stmt(
   'OpenElement',
-  (args: { tag: SourceSlice }): wire.Statements.OpenElement => [
-    op.OpenElement,
-    args.tag.getString(),
-  ]
+  (args: { tag: SourceSlice }): wire.Statements.OpenElement => [op.OpenElement, args.tag.encode()]
 ) {}
 
 export class OpenElementWithSplat extends stmt(
   'OpenElementWithSplat',
   (args: { tag: SourceSlice }): wire.Statements.OpenElementWithSplat => [
     op.OpenElementWithSplat,
-    args.tag.getString(),
+    args.tag.encode(),
   ]
 ) {}
 

@@ -1,4 +1,5 @@
 import { SourceLocation, SourcePosition } from '@glimmer/syntax';
+import { PresentArray } from '../../../util';
 import { positionToOffset } from '../location';
 import { SourceOffsets } from './location';
 import { LocatedWithOffsets, LocatedWithPositions } from './ops';
@@ -88,12 +89,11 @@ export class UnlocatedOp<O extends Op> {
   constructor(private Class: OpConstructor<O>, private args: OpArgs<O>, private source: string) {}
 
   loc(
-    location:
-      | SourceLocation
-      | LocatedWithPositions
-      | [LocatedWithPositions, ...LocatedWithPositions[]]
+    location: null | SourceLocation | LocatedWithPositions | PresentArray<LocatedWithPositions>
   ): O {
-    if (Array.isArray(location)) {
+    if (location === null) {
+      return new this.Class(null, this.args) as O;
+    } else if (Array.isArray(location)) {
       let first = location[0];
       let last = location[location.length - 1];
 

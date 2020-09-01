@@ -1,5 +1,6 @@
 import { ExpressionContext } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
+import { assign } from '@glimmer/util';
 import * as pass1 from '../pass1/ops';
 import { Context, Pass0Visitor } from './context';
 import { isKeywordCall } from './is-node';
@@ -40,10 +41,15 @@ class Pass0Expressions implements Pass0ExpressionsVisitor {
       return ctx.helper.keyword(expr);
     } else {
       return ctx
-        .expr(pass1.SubExpression, {
-          head: ctx.helper.visitExpr(expr.path, ExpressionContext.CallHead),
-          ...ctx.helper.args(expr),
-        })
+        .expr(
+          pass1.SubExpression,
+          assign(
+            {
+              head: ctx.helper.visitExpr(expr.path, ExpressionContext.CallHead),
+            },
+            ctx.helper.args(expr)
+          )
+        )
         .loc(expr);
     }
   }

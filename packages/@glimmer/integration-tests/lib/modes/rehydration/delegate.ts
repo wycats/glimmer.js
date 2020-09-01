@@ -19,9 +19,10 @@ import {
   SimpleText,
   ElementNamespace,
   SimpleDocumentFragment,
+  NodeType,
 } from '@simple-dom/interface';
 import { ComponentKind } from '../../components';
-import { replaceHTML, toInnerHTML } from '../../dom/simple-utils';
+import { castToSimple, replaceHTML, toInnerHTML } from '../../dom/simple-utils';
 import { UserHelper } from '../../helpers';
 import { TestModifierConstructor } from '../../modifiers';
 import RenderDelegate, { RenderDelegateOptions } from '../../render-delegate';
@@ -69,7 +70,7 @@ export class RehydrationDelegate implements RenderDelegate {
   constructor(options?: RenderDelegateOptions) {
     let delegate = assign(options?.env ?? {}, BaseEnv);
 
-    this.clientDoc = document as SimpleDocument;
+    this.clientDoc = castToSimple(document, NodeType.DOCUMENT_NODE);
     this.clientResolver = new TestJitRuntimeResolver();
     this.clientRegistry = this.clientResolver.registry;
     this.clientEnv = JitDelegateContext(
@@ -227,5 +228,7 @@ export class RehydrationDelegate implements RenderDelegate {
 }
 
 export function qunitFixture(): SimpleElement {
-  return document.getElementById('qunit-fixture') as SimpleElement;
+  return castToSimple(document.getElementById('qunit-fixture'), NodeType.ELEMENT_NODE, {
+    assertPresent: true,
+  });
 }

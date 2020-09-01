@@ -4,12 +4,9 @@ import {
   SexpOpcodes,
   WireFormat as wire,
 } from '@glimmer/interfaces';
-import { AST } from '@glimmer/syntax';
-import { DictSet } from '@glimmer/util';
-import { isArgument, isAttribute, isFlushElement } from '@glimmer/wire-format';
+import { DictSet, isPresent } from '@glimmer/util';
 import { SourceSlice } from '../pass1/ops';
 import { BlockSymbolTable, ProgramSymbolTable } from '../shared/symbol-table';
-import { isPresent } from '../shared/utils';
 import * as out from './out';
 
 export abstract class Block {
@@ -43,7 +40,7 @@ export class TemplateBlock extends Block {
   public blocks: NamedBlock[] = [];
   public hasEval = false;
 
-  constructor(private symbolTable: AST.ProgramSymbols) {
+  constructor(private symbolTable: ProgramSymbolTable) {
     super();
   }
 
@@ -118,7 +115,7 @@ export class ComponentBlock extends Block {
       blocks = [['default'], [this.encodeAsBlock()]];
     }
 
-    return [SexpOpcodes.Component, tag, attrs, hash, blocks];
+    return [SexpOpcodes.Component, tag, isPresent(attrs) ? attrs : null, hash, blocks];
   }
 
   encodeAsBlock(): SerializedInlineBlock {

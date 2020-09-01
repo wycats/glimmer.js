@@ -109,7 +109,14 @@ export class NonemptyStackImpl<T> implements NonemptyStack<T> {
     return item;
   }
 
+  nth(from: 0): T;
+  nth(from: number): Option<T>;
   nth(from: number): Option<T> {
+    let len = this.stack.length;
+    return from >= len ? null : this.stack[from];
+  }
+
+  nthBack(from: number): Option<T> {
     let len = this.stack.length;
     return len < from ? null : this.stack[len - from];
   }

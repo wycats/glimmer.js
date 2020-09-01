@@ -41,6 +41,7 @@ import {
   SimpleText,
   ElementNamespace,
   SimpleDocumentFragment,
+  NodeType,
 } from '@simple-dom/interface';
 import { BasicComponent, BasicComponentManager } from '../../components/basic';
 import {
@@ -69,6 +70,7 @@ import { TestMacros } from '../../compile/macros';
 import AotCompilerDelegate from './compiler-delegate';
 import { preprocess } from '../../compile';
 import { BaseEnv } from '../env';
+import { castToSimple } from '../../dom/simple-utils';
 
 export type RenderDelegateComponentDefinition = ComponentDefinition<TestComponentDefinitionState>;
 
@@ -113,7 +115,7 @@ export class AotRenderDelegate implements RenderDelegate {
   constructor(options?: RenderDelegateOptions) {
     this.registerInternalHelper('-get-dynamic-var', getDynamicVar);
     this.env = assign(options?.env ?? {}, BaseEnv);
-    this.doc = options?.doc || (document as SimpleDocument);
+    this.doc = castToSimple(options?.doc ?? document, NodeType.DOCUMENT_NODE);
   }
 
   getElementBuilder(env: Environment, cursor: Cursor): ElementBuilder {

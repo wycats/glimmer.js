@@ -48,8 +48,9 @@ export const enum SexpOpcodes {
   Call = 30,
   Concat = 31,
 
-  // GetPath
-  GetExprPath = 32,
+  GetPath = 32,
+
+  // Get
   GetSymbol = 33, // GetPath + 0-2,
   GetFree = 34,
   GetFreeInAppendSingleId = 35, // GetContextualFree + 0-5
@@ -62,7 +63,10 @@ export const enum SexpOpcodes {
   // InElement
   InElement = 41,
 
-  GetPathStart = GetSymbol,
+  GetStart = GetPath,
+  GetEnd = GetFreeInComponentHead,
+  GetSloppyFreeStart = GetFreeInAppendSingleId,
+  GetSloppyFreeEnd = GetFreeInComponentHead,
   GetContextualFreeStart = GetFreeInAppendSingleId,
 }
 
@@ -81,7 +85,7 @@ export type SexpOpcode = keyof SexpOpcodeMap;
 export namespace Core {
   export type Expression = Expressions.Expression;
 
-  export type Path = string[];
+  export type Path = [string, ...string[]];
   export type ConcatParams = [Expression, ...Expression[]];
   export type Params = Option<ConcatParams>;
   export type Hash = Option<[[string, ...string[]], [Expression, ...Expression[]]]>;
@@ -133,38 +137,15 @@ export namespace Expressions {
     | GetFreeInBlockHead
     | GetFreeInModifierHead
     | GetFreeInComponentHead;
-  export type Get = GetSymbol | GetFree | GetContextualFree;
 
-  export type GetExprPath = [SexpOpcodes.GetExprPath, Expression, Path];
-  export type GetPathSymbol = [SexpOpcodes.GetSymbol, number, Path];
-  export type GetPathFree = [SexpOpcodes.GetFree, number, Path];
-  export type GetPathFreeInAppendSingleId = [SexpOpcodes.GetFreeInAppendSingleId, number, Path];
-  export type GetPathFreeInExpression = [SexpOpcodes.GetFreeInExpression, number, Path];
-  export type GetPathFreeInCallHead = [SexpOpcodes.GetFreeInCallHead, number, Path];
-  export type GetPathFreeInBlockHead = [SexpOpcodes.GetFreeInBlockHead, number, Path];
-  export type GetPathFreeInModifierHead = [SexpOpcodes.GetFreeInModifierHead, number, Path];
-  export type GetPathFreeInComponentHead = [SexpOpcodes.GetFreeInComponentHead, number, Path];
-
-  export type GetPathContextualFree =
-    | GetPathFreeInAppendSingleId
-    | GetPathFreeInExpression
-    | GetPathFreeInCallHead
-    | GetPathFreeInBlockHead
-    | GetPathFreeInModifierHead
-    | GetPathFreeInComponentHead;
-  export type GetPath = GetExprPath | GetPathSymbol | GetPathFree | GetPathContextualFree;
+  export type GetVar = GetSymbol | GetFree | GetContextualFree;
+  export type GetPath = [SexpOpcodes.GetPath, Expression, Path];
+  export type Get = GetVar | GetPath;
 
   export type Value = string | number | boolean | null;
   export type Undefined = [SexpOpcodes.Undefined];
 
-  export type TupleExpression =
-    | Get
-    | GetPath
-    | Concat
-    | HasBlock
-    | HasBlockParams
-    | Helper
-    | Undefined;
+  export type TupleExpression = Get | Concat | HasBlock | HasBlockParams | Helper | Undefined;
 
   export type Expression = TupleExpression | Value;
 
@@ -177,7 +158,7 @@ export namespace Expressions {
 }
 
 export type Expression = Expressions.Expression;
-export type Get = Expressions.Get;
+export type Get = Expressions.GetVar;
 
 export type TupleExpression = Expressions.TupleExpression;
 
@@ -210,16 +191,27 @@ export namespace Statements {
   export type Comment = [SexpOpcodes.Comment, string];
   export type Modifier = [SexpOpcodes.Modifier, Expression, Params, Hash];
   export type Block = [SexpOpcodes.Block, Expression, Option<Params>, Hash, Blocks];
-  export type Component = [SexpOpcodes.Component, Expression, Parameter[], Hash, Blocks];
+  export type Component = [
+    SexpOpcodes.Component,
+    Expression,
+    Option<[Parameter, ...Parameter[]]>,
+    Hash,
+    Blocks
+  ];
   export type OpenElement = [SexpOpcodes.OpenElement, string | WellKnownTagName];
   export type OpenElementWithSplat = [SexpOpcodes.OpenElementWithSplat, string | WellKnownTagName];
   export type FlushElement = [SexpOpcodes.FlushElement];
   export type CloseElement = [SexpOpcodes.CloseElement];
-  export type StaticAttr = [SexpOpcodes.StaticAttr, string | WellKnownAttrName, string, string?];
+  export type StaticAttr = [
+    SexpOpcodes.StaticAttr,
+    string | WellKnownAttrName,
+    Expression,
+    string?
+  ];
   export type StaticComponentAttr = [
     SexpOpcodes.StaticComponentAttr,
     string | WellKnownAttrName,
-    string,
+    Expression,
     string?
   ];
   export type DynamicAttr = [
@@ -310,7 +302,7 @@ export type Parameter = Statements.Parameter;
 
 export type SexpSyntax = Statement | TupleExpression;
 export type Syntax = SexpSyntax | Expressions.Value;
-export type SyntaxWithInternal = Syntax | CoreSyntax;
+export type SyntaxWithInternal = Syntax | CoreSyntax | SerializedTemplateBlock;
 
 /**
  * A JSON object that the Block was serialized into.

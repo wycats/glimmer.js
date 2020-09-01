@@ -1,17 +1,17 @@
-import { ExpressionContext, Option } from '@glimmer/interfaces';
-import { AST } from '@glimmer/syntax';
 import { expect } from '@glimmer/util';
 import * as pass1 from '../pass1/ops';
 import * as pass2 from '../pass2/ops';
 import { OpArgs, OpConstructor } from '../shared/op';
-import { SymbolTable } from '../shared/symbol-table';
 import { Context, Pass1Visitor } from './context';
 
 type Pass1StatementsVisitor = Pass1Visitor['statements'];
 
 class Pass1Statements implements Pass1StatementsVisitor {
-  Yield({ target }: OpArgs<pass1.Yield>, ctx: Context): pass2.Op {
-    return ctx.op(pass2.Yield, { symbol: ctx.table.allocateBlock(target.getString()) });
+  Yield({ target, params }: OpArgs<pass1.Yield>, ctx: Context): pass2.Op[] {
+    return ctx.ops(
+      ctx.visitExpr(params),
+      ctx.op(pass2.Yield, { symbol: ctx.table.allocateBlock(target.getString()) })
+    );
   }
 
   Debugger(_: OpArgs<pass1.Debugger>, ctx: Context): pass2.Op {
@@ -113,10 +113,12 @@ class Pass1Statements implements Pass1StatementsVisitor {
   }
 
   Block({ name, symbols, body }: OpArgs<pass1.Block>, ctx: Context): pass2.Op[] {
-    return ctx.ops(
-      ctx.op(pass2.StartBlock, { name, symbols }),
-      ctx.map(body, statement => ctx.visitStmt(statement)),
-      ctx.op(pass2.EndBlock)
+    return ctx.withBlock(symbols, () =>
+      ctx.ops(
+        ctx.op(pass2.StartBlock, { name, symbols }),
+        ctx.map(body, statement => ctx.visitStmt(statement)),
+        ctx.op(pass2.EndBlock)
+      )
     );
   }
 
@@ -124,13 +126,13 @@ class Pass1Statements implements Pass1StatementsVisitor {
     { head, params, hash, blocks }: OpArgs<pass1.BlockInvocation>,
     ctx: Context
   ): pass2.Op[] {
-    let inverseBlock = pass1.getBlock(blocks, 'inverse') || null;
+    let inverseBlock = pass1.getBlock(blocks, 'else') || null;
     let defaultBlock = expect(pass1.getBlock(blocks, 'default'), 'expected a default block');
 
     return ctx.ops(
       ctx.helper.args({ params, hash }),
       ctx.visitExpr(head),
-      ctx.visitStmt(inverseBlock),
+      inverseBlock ? ctx.visitStmt(inverseBlock) : [],
       ctx.visitStmt(defaultBlock),
       ctx.op(pass2.InvokeBlock, { hasInverse: !!inverseBlock })
     );
@@ -149,127 +151,4 @@ function classifyAttr(kind: pass1.AttrKind, value: pass1.Expr): OpConstructor<pa
   } else {
     return kind.component ? pass2.ComponentAttr : pass2.DynamicAttr;
   }
-}
-
-type ClassifiedElement =
-  | {
-      is: 'dynamic-tag';
-      path: AST.PathExpression;
-    }
-  | {
-      is: 'component';
-    }
-  | { is: 'dynamic' }
-  | { is: 'named-block' }
-  | { is: 'html' };
-
-function classifyElement(element: AST.ElementNode, symbols: SymbolTable): ClassifiedElement {
-  let open = element.tag.charAt(0);
-
-  let [maybeLocal, ...rest] = element.tag.split('.');
-  let isNamedArgument = open === '@';
-  let isThisPath = maybeLocal === 'this';
-
-  if (isNamedBlock(element)) {
-    return { is: 'named-block' };
-  }
-
-  if (isNamedArgument) {
-    return {
-      is: 'dynamic-tag',
-      path: {
-        type: 'PathExpression',
-        data: true,
-        parts: [maybeLocal.slice(1), ...rest],
-        this: false,
-        original: element.tag,
-        loc: element.loc,
-      },
-    };
-  }
-
-  if (isThisPath) {
-    return {
-      is: 'dynamic-tag',
-      path: {
-        type: 'PathExpression',
-        data: false,
-        parts: rest,
-        this: true,
-        original: element.tag,
-        loc: element.loc,
-      },
-    };
-  }
-
-  if (symbols.has(maybeLocal)) {
-    return {
-      is: 'dynamic-tag',
-      path: {
-        type: 'PathExpression',
-        data: false,
-        parts: [maybeLocal, ...rest],
-        this: false,
-        original: element.tag,
-        loc: element.loc,
-      },
-    };
-  }
-
-  if (open === open.toUpperCase() && open !== open.toLowerCase()) {
-    return { is: 'component' };
-  }
-
-  if (isHTMLElement(element)) {
-    // we're looking at an element with no component features
-    // (no modifiers, no splattributes)
-    return { is: 'html' };
-  } else {
-    return { is: 'dynamic' };
-  }
-}
-
-function isHTMLElement(element: AST.ElementNode): boolean {
-  let { attributes, modifiers } = element;
-
-  if (modifiers.length > 0) {
-    return false;
-  }
-
-  return !attributes.find(attr => attr.name === '...attributes');
-}
-
-function attributes(attrs: AST.AttrNode[]): AST.AttrNode[] {
-  let out = [];
-  let typeAttr: Option<AST.AttrNode> = null;
-
-  for (let attr of attrs) {
-    if (attr.name === 'type') {
-      typeAttr = attr;
-    } else {
-      out.push(attr);
-    }
-  }
-
-  if (typeAttr) {
-    out.push(typeAttr);
-  }
-
-  return out;
-}
-
-function mustacheContext(body: AST.Expression): ExpressionContext {
-  if (body.type === 'PathExpression') {
-    if (body.parts.length > 1 || body.data) {
-      return ExpressionContext.Expression;
-    } else {
-      return ExpressionContext.AppendSingleId;
-    }
-  } else {
-    return ExpressionContext.Expression;
-  }
-}
-
-function isNamedBlock(element: AST.ElementNode): boolean {
-  return element.tag[0] === ':';
 }

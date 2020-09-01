@@ -1,4 +1,3 @@
-import { SourceSlice } from '../pass1/ops';
 import { ProgramSymbolTable } from '../shared/symbol-table';
 import { Block, ComponentBlock, NamedBlock } from './blocks';
 import * as out from './out';
@@ -40,7 +39,7 @@ export function present<T extends In, In>(check: Check<T, In>): Check<NonNullabl
 
 export const ANY: Check<out.StackValue> = {
   name: 'any',
-  match(value: out.StackValue): value is out.StackValue {
+  match(_value: out.StackValue): _value is out.StackValue {
     return true;
   },
 };
@@ -57,6 +56,8 @@ export const EXPR: Check<out.Expr> = {
       case 'GetPath':
       case 'Concat':
       case 'Call':
+      case 'HasBlock':
+      case 'HasBlockParams':
         return true;
       default:
         return false;
@@ -85,6 +86,13 @@ export const HASH: Check<out.AnyHash> = {
   },
 };
 
+export const HASH_PAIR: Check<out.HashPair> = {
+  name: 'HashPair',
+  match(value: out.StackValue): value is out.HashPair {
+    return value.name === 'HashPair';
+  },
+};
+
 export const GET: Check<out.GetVar> = {
   name: 'GetVar',
   match(value: out.StackValue): value is out.GetVar {
@@ -94,9 +102,9 @@ export const GET: Check<out.GetVar> = {
   },
 };
 
-export const STRING: Check<SourceSlice> = {
+export const STRING: Check<out.SourceSlice> = {
   name: 'SourceSlice',
-  match(value: out.StackValue): value is SourceSlice {
+  match(value: out.StackValue): value is out.SourceSlice {
     return value.name === 'SourceSlice';
   },
 };
@@ -119,7 +127,7 @@ export const MAYBE_NAMED_BLOCK: Check<NamedBlock | undefined, Block | undefined>
   },
 };
 
-export const NAMED_BLOCK: Check<NamedBlock, Block | undefined> = {
+export const NAMED_BLOCK: Check<NamedBlock, NamedBlock | undefined> = {
   name: 'NamedBlock',
   match(value: Block | undefined): value is NamedBlock {
     return value !== undefined && value instanceof NamedBlock;

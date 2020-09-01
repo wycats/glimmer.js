@@ -209,8 +209,7 @@ export default class BundleCompiler {
 
   preprocess(locator: ModuleLocator, input: string): SerializedTemplateBlock {
     let options = { meta: locator, plugins: { ast: this.plugins } };
-    let { block } = precompileJSON(input, options);
-    return block;
+    return precompileJSON(input, options);
   }
 
   compilerModuleLocatorResolver(): BundleCompilerLookup<ModuleLocator> {

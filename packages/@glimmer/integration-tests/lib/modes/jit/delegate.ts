@@ -17,6 +17,7 @@ import {
   ElementNamespace,
   SimpleText,
   SimpleDocumentFragment,
+  NodeType,
 } from '@simple-dom/interface';
 import { TestJitRegistry } from './registry';
 import {
@@ -54,6 +55,7 @@ import { JitContext } from '@glimmer/opcode-compiler';
 import { preprocess } from '../../compile';
 import { unwrapTemplate, assign } from '@glimmer/util';
 import { BaseEnv } from '../env';
+import { castToBrowser, castToSimple } from '../../dom/simple-utils';
 
 export interface JitTestDelegateContext {
   runtime: JitRuntimeContext;
@@ -85,7 +87,7 @@ export class JitRenderDelegate implements RenderDelegate {
   private env: EnvironmentDelegate;
 
   constructor(options?: RenderDelegateOptions) {
-    this.doc = options?.doc ?? (document as SimpleDocument);
+    this.doc = castToSimple(options?.doc ?? document, NodeType.DOCUMENT_NODE);
     this.env = assign(options?.env ?? {}, BaseEnv);
     this.context = this.getContext();
   }
@@ -95,8 +97,11 @@ export class JitRenderDelegate implements RenderDelegate {
   }
 
   getInitialElement(): SimpleElement {
-    if (isBrowserTestDocument(this.doc)) {
-      return this.doc.getElementById('qunit-fixture')! as SimpleElement;
+    let browserDoc = getBrowserTestDocument(this.doc);
+    if (browserDoc) {
+      return castToSimple(browserDoc.getElementById('qunit-fixture'), NodeType.ELEMENT_NODE, {
+        assertPresent: true,
+      });
     } else {
       return this.createElement('div');
     }
@@ -235,6 +240,10 @@ export class JitRenderDelegate implements RenderDelegate {
   }
 }
 
-function isBrowserTestDocument(doc: SimpleDocument): doc is SimpleDocument & Document {
-  return !!((doc as any).getElementById && (doc as any).getElementById('qunit-fixture'));
+function getBrowserTestDocument(doc: SimpleDocument | Document): Document | null {
+  if (!!((doc as any).getElementById && (doc as any).getElementById('qunit-fixture'))) {
+    return castToBrowser(doc as SimpleDocument);
+  } else {
+    return null;
+  }
 }

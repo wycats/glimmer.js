@@ -9,13 +9,15 @@ export interface Attr {
   namespace?: string;
 }
 
+export class Template extends op('Template').args<{ symbols: ProgramSymbolTable; ops: Op[] }>() {}
+
 export class OpenInElement extends op('OpenInElement').args<{
   guid: string;
 }>() {}
 
 export class CloseInElement extends op('CloseInElement').void() {}
 
-export class StartProgram extends op('StartProgram').args<ProgramSymbolTable>() {}
+export class StartProgram extends op('StartProgram').void() {}
 export class EndProgram extends op('EndProgram').void() {}
 export class StartBlock extends op('StartBlock').args<{
   symbols: BlockSymbolTable;
@@ -46,7 +48,7 @@ export class Helper extends op('Helper').void() {}
 export class Modifier extends op('Modifier').void() {}
 export class InvokeBlock extends op('InvokeBlock').args<{ hasInverse: boolean }>() {}
 export class AttrSplat extends op('AttrSplat').args<{ symbol: number }>() {}
-export class GetPath extends op('GetPath').args<pass1.SourceSlice[]>() {}
+export class GetPath extends op('GetPath').args<[pass1.SourceSlice, ...pass1.SourceSlice[]]>() {}
 export class GetSymbol extends op('GetSymbol').args<{ symbol: number }>() {}
 export class GetFreeWithContext extends op('GetFreeWithContext').args<{
   symbol: number;
@@ -64,9 +66,11 @@ export class Literal extends op('Literal').args<{
 export class Concat extends op('Concat').void() {}
 export class HasBlock extends op('HasBlock').args<{ symbol: number }>() {}
 export class HasBlockParams extends op('HasBlockParams').args<{ symbol: number }>() {}
-export class PrepareArray extends op('PrepareArray').args<{ entries: number }>() {}
+export class Params extends op('Params').args<{ entries: number }>() {}
 export class EmptyParams extends op('EmptyParams').void() {}
-export class PrepareObject extends op('PrepareObject').args<{ entries: number }>() {}
+export class Hash extends op('Hash').args<{ entries: number }>() {}
+export class EmptyHash extends op('EmptyHash').void() {}
+export class HashPair extends op('HashPair').args<{ key: pass1.SourceSlice }>() {}
 
 export type AnyArg = StaticArg | DynamicArg;
 
@@ -97,7 +101,7 @@ export type Expr =
   | Helper
   | HasBlock
   | HasBlockParams;
-export type Internal = PrepareArray | PrepareObject | EmptyParams;
+export type Internal = Params | EmptyParams | Hash | EmptyHash | HashPair;
 export type Statement =
   | StartProgram
   | EndProgram
@@ -131,7 +135,7 @@ export type Statement =
 
 export type Op = Expr | Internal | Statement;
 
-export type OpTable = OpsTable<Op>;
 export type ExprTable = OpsTable<Expr>;
 export type InternalTable = OpsTable<Internal>;
 export type StatementTable = OpsTable<Statement>;
+export type OpTable = ExprTable | InternalTable | StatementTable;
