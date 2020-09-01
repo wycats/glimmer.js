@@ -251,9 +251,10 @@ export namespace Statements {
   export type Debugger = [SexpOpcodes.Debugger, Core.EvalInfo];
   export type InElement = [
     op: SexpOpcodes.InElement,
+    block: SerializedInlineBlock,
     guid: string,
-    insertBefore: Expression,
-    destination?: Expression
+    destination: Expression,
+    insertBefore?: Expression
   ];
 
   /**

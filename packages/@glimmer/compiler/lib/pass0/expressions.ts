@@ -3,7 +3,7 @@ import { AST } from '@glimmer/syntax';
 import { assign } from '@glimmer/util';
 import * as pass1 from '../pass1/ops';
 import { Context, Pass0Visitor } from './context';
-import { isKeywordCall } from './is-node';
+import { assertIsSimpleHelper, isHelperInvocation, isKeywordCall } from './is-node';
 
 type Pass0ExpressionsVisitor = Pass0Visitor['expressions'];
 
@@ -40,6 +40,10 @@ class Pass0Expressions implements Pass0ExpressionsVisitor {
     if (isKeywordCall(expr)) {
       return ctx.helper.keyword(expr);
     } else {
+      if (isHelperInvocation(expr)) {
+        assertIsSimpleHelper(expr, expr.loc, 'helper');
+      }
+
       return ctx
         .expr(
           pass1.SubExpression,

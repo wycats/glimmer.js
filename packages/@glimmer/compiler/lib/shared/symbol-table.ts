@@ -1,4 +1,4 @@
-import { dict, unreachable } from '@glimmer/util';
+import { assert, dict, unreachable } from '@glimmer/util';
 import { Core, Dict } from '@glimmer/interfaces';
 
 export abstract class SymbolTable {
@@ -31,20 +31,65 @@ export class ProgramSymbolTable extends SymbolTable {
   private named = dict<number>();
   private blocks = dict<number>();
 
-  has(_name: string): boolean {
-    return false;
+  #hasEval: boolean = false;
+
+  setHasEval(): void {
+    this.#hasEval = true;
   }
 
-  get(_name: string): never {
+  get hasEval(): boolean {
+    return this.#hasEval;
+  }
+
+  has(name: string): boolean {
+    return false;
+    switch (name[0]) {
+      case '@':
+      case '&': {
+        // a single bare name can appear multiple times in `symbols`, but
+        // args and blocks are de-duped, so this is reliable
+        return true;
+      }
+      default: {
+        return false;
+      }
+    }
+  }
+
+  get(name: string): number {
     throw unreachable();
+    switch (name[0]) {
+      case '@':
+      case '&': {
+        // a single bare name can appear multiple times in `symbols`, but
+        // args and blocks are de-duped, so this is reliable
+        let slot = this.symbols.indexOf(name);
+        assert(slot !== -1, "attempted to get a symbol that doesn't exist");
+        return slot;
+      }
+      default: {
+        assert(false, "attempted to get a free variable using 'get'. ");
+        // free variable
+      }
+    }
   }
 
   getLocalsMap(): Dict<number> {
-    return {};
+    return dict();
+    let d = dict<number>();
+    this.symbols.forEach(symbol => {
+      if (this.has(symbol)) {
+        d[symbol] = this.get(symbol);
+      } else {
+        d[symbol] = -1;
+      }
+    });
+    return d;
   }
 
   getEvalInfo(): Core.EvalInfo {
-    return [];
+    let locals = this.getLocalsMap();
+    return Object.keys(locals).map(symbol => locals[symbol]);
   }
 
   allocateFree(name: string): number {

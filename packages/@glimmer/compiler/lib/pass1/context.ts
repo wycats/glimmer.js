@@ -106,6 +106,10 @@ export class Context {
     return factory.op(pass2.Template, ...args);
   }
 
+  setHasEval(): void {
+    this.templateSymbols.setHasEval();
+  }
+
   op<O extends pass2.Op>(name: OpConstructor<O>, ...args: InputOpArgs<O>): O {
     return this.unlocatedOp(name, ...args).offsets(this.offsets);
   }
@@ -138,6 +142,18 @@ export class Context {
 
   endBlock(): void {
     this.symbols.pop();
+  }
+
+  /**
+   * This method visits a possibly missing expression, ensuring that a stack value
+   * will be on the stack for pass2 to pop off.
+   */
+  visitOptionalExpr(node: pass1.Expr | undefined): pass2.Op[] {
+    if (node === undefined) {
+      return [this.op(pass2.Missing)];
+    } else {
+      return this.visitExpr(node);
+    }
   }
 
   visitExpr(node: pass1.Expr | null): pass2.Op[] {

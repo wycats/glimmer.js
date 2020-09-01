@@ -8,6 +8,10 @@ import * as pass2 from './ops';
 import * as out from './out';
 
 class InternalVisitors implements Visitors<pass2.InternalTable, void> {
+  Missing(ctx: Context): void {
+    ctx.pushValue(out.Missing);
+  }
+
   Params(ctx: Context, { entries }: OpArgs<pass2.Params>): void {
     ctx.assertStackHas(entries);
 

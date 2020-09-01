@@ -2,7 +2,7 @@ import * as pass1 from '../pass1/ops';
 import { OpArgs } from '../shared/op';
 import { Visitors } from '../shared/visitors';
 import { ComponentBlock, NamedBlock } from './blocks';
-import { check, EXPR, HASH, NAMED_BLOCK, PARAMS } from './checks';
+import { check, EXPR, HASH, MAYBE_EXPR, NAMED_BLOCK, PARAMS } from './checks';
 import { Context } from './context';
 import * as pass2 from './ops';
 import * as out from './out';
@@ -24,15 +24,23 @@ class StatementsVisitor implements Visitors<pass2.StatementTable, out.Statement 
 
   Partial(ctx: Context): out.Statement {
     let expr = ctx.popValue(EXPR);
-    return ctx.op(out.Partial, { expr, info: ctx.template.evalInfo });
+    return ctx.op(out.Partial, { expr, info: ctx.currentBlock.evalInfo });
   }
 
   Debugger(ctx: Context): out.Statement {
-    return ctx.op(out.Debugger, { info: ctx.template.evalInfo });
+    return ctx.op(out.Debugger, { info: ctx.currentBlock.evalInfo });
   }
 
   Yield(ctx: Context, { symbol }: OpArgs<pass2.Yield>): out.Statement {
     return ctx.op(out.Yield, { to: symbol, params: ctx.popValue(PARAMS) });
+  }
+
+  InvokeInElement(ctx: Context, { guid }: OpArgs<pass2.InvokeInElement>): out.Statement {
+    let block = ctx.popValue(NAMED_BLOCK);
+    let destination = ctx.popValue(EXPR);
+    let insertBefore = ctx.popValue(MAYBE_EXPR);
+
+    return ctx.op(out.InElement, { guid, block, insertBefore, destination });
   }
 
   InvokeBlock(ctx: Context, { hasInverse }: OpArgs<pass2.InvokeBlock>): out.Statement {
@@ -102,8 +110,6 @@ class StatementsVisitor implements Visitors<pass2.StatementTable, out.Statement 
   OpenComponent(ctx: Context, { symbols, selfClosing }: OpArgs<pass2.OpenComponent>): void {
     let tag = ctx.popValue(EXPR);
 
-    // TODO customizeComponentName -- this belongs in pass0
-
     ctx.startBlock(new ComponentBlock(tag, symbols, selfClosing));
   }
 
@@ -140,7 +146,7 @@ class StatementsVisitor implements Visitors<pass2.StatementTable, out.Statement 
   }
 
   TrustingAttr(ctx: Context, args: OpArgs<pass2.TrustingAttr>): out.Statement {
-    return ctx.op(out.TrustingComponentAttr, attr(ctx, args));
+    return ctx.op(out.TrustingDynamicAttr, attr(ctx, args));
   }
 
   AttrSplat(ctx: Context, args: OpArgs<pass2.AttrSplat>): out.Statement {

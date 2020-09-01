@@ -88,7 +88,7 @@ export class JitConstants extends WriteOnlyConstants implements RuntimeConstants
   }
 
   getValue<T>(index: number) {
-    assert(index > 0, `cannot get value for handle: ${index}`);
+    assert(index >= 0, `cannot get value for handle: ${index}`);
 
     return this.values[index] as T;
   }
@@ -113,5 +113,9 @@ export class JitConstants extends WriteOnlyConstants implements RuntimeConstants
 
   getSerializable<T>(s: number): T {
     return JSON.parse(this.getValue(s)) as T;
+  }
+
+  getOther(s: number): unknown {
+    return this.getValue(s);
   }
 }

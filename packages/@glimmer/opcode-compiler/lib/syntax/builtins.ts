@@ -1,12 +1,11 @@
 import {
-  Expressions,
   MachineOp,
   MacroBlocks,
   MacroInlines,
   Op,
   StatementCompileActions,
 } from '@glimmer/interfaces';
-import { assert, expect, unwrap, isPresent } from '@glimmer/util';
+import { assert, expect, isPresent, unwrap } from '@glimmer/util';
 import { $fp, $sp } from '@glimmer/vm';
 import { error, op } from '../opcode-builder/encoder';
 import { InvokeStaticBlock, InvokeStaticBlockWithStack } from '../opcode-builder/helpers/blocks';
@@ -155,51 +154,6 @@ export function populateBuiltins(
         }
 
         return out;
-      },
-    });
-  });
-
-  blocks.add('in-element', (params, hash, blocks) => {
-    if (!params || params.length !== 1) {
-      throw new Error(`SYNTAX ERROR: #in-element requires a single argument`);
-    }
-
-    return ReplayableIf({
-      args() {
-        assert(hash !== null, '[BUG] `{{#in-element}}` should have non-empty hash');
-
-        let [keys, values] = hash!;
-
-        let actions: StatementCompileActions = [];
-
-        let insertBefore: Expressions.Expression;
-        let guid: Expressions.Expression;
-
-        for (let i = 0; i < keys.length; i++) {
-          let key = keys[i];
-          if (key === 'guid') {
-            guid = values[i];
-          } else if (key === 'insertBefore') {
-            insertBefore = values[i];
-          } else {
-            throw new Error(`SYNTAX ERROR: #in-element does not take a \`${keys[0]}\` option`);
-          }
-        }
-
-        // this order is important
-        actions.push(op('Expr', guid!));
-        actions.push(op('Expr', insertBefore!));
-        actions.push(op('Expr', params[0]), op(Op.Dup, $sp, 0));
-
-        return { count: 4, actions };
-      },
-
-      ifTrue() {
-        return [
-          op(Op.PushRemoteElement),
-          InvokeStaticBlock(unwrap(blocks.get('default'))),
-          op(Op.PopRemoteElement),
-        ];
       },
     });
   });

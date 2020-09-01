@@ -4,7 +4,7 @@ import { assign } from '@glimmer/util';
 import * as pass1 from '../pass1/ops';
 import { BlockSymbolTable, SymbolTable } from '../shared/symbol-table';
 import { Context, Pass0Visitor } from './context';
-import { hasPath, isHelperInvocation, isKeywordCall } from './is-node';
+import { assertIsSimpleHelper, hasPath, isHelperInvocation, isKeywordCall } from './is-node';
 import { DEBUGGER, IN_ELEMENT, PARTIAL, YIELD } from './keywords';
 
 type Pass0StatementsVisitor = Pass0Visitor['statements'];
@@ -116,6 +116,8 @@ class Pass0Statements implements Pass0StatementsVisitor {
         })
         .loc(mustache);
     }
+
+    assertIsSimpleHelper(mustache, mustache.loc, 'helper');
 
     return ctx
       .append(
@@ -277,12 +279,12 @@ function openElementOp(
         .loc(head);
     }
 
-    case 'component':
+    case 'component': {
       return ctx
         .op(pass1.OpenComponent, {
           tag: ctx
             .expr(pass1.GetVar, {
-              name: ctx.slice(classified.tag).offsets(null),
+              name: ctx.slice(ctx.customizeComponentName(classified.tag)).offsets(null),
               context: ExpressionContext.ComponentHead,
             })
             .loc(classified),
@@ -290,6 +292,7 @@ function openElementOp(
           selfClosing: classified.selfClosing,
         })
         .loc(classified);
+    }
 
     // TODO: Reject block params for both kinds of HTML elements
     case 'has-dynamic-features':
@@ -323,7 +326,7 @@ function closeElementOp(
   }
 }
 
-// TODO: I transcribed this from the existing code, but the only
+// TODO I transcribed this from the existing code, but the only
 // reason this difference matters is that splattributes requires
 // a special ElementOperations that merges attributes, so I don't
 // know why modifiers matter (it might matter if modifiers become

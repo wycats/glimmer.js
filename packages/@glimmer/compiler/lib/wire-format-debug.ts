@@ -187,8 +187,13 @@ export default class WireFormatDebugger {
         case Op.GetFreeInModifierHead:
           return ['get-free-in-modifier-head', this.program.upvars[opcode[1]]];
 
-        case Op.GetSymbol:
-          return ['get-symbol', this.program.upvars[opcode[1]]];
+        case Op.GetSymbol: {
+          if (opcode[1] === 0) {
+            return ['get-symbol', 'this'];
+          } else {
+            return ['get-symbol', this.program.symbols[opcode[1] - 1]];
+          }
+        }
       }
     } else {
       return opcode;

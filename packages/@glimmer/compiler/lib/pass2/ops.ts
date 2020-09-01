@@ -11,11 +11,9 @@ export interface Attr {
 
 export class Template extends op('Template').args<{ symbols: ProgramSymbolTable; ops: Op[] }>() {}
 
-export class OpenInElement extends op('OpenInElement').args<{
+export class InvokeInElement extends op('InvokeInElement').args<{
   guid: string;
 }>() {}
-
-export class CloseInElement extends op('CloseInElement').void() {}
 
 export class StartProgram extends op('StartProgram').void() {}
 export class EndProgram extends op('EndProgram').void() {}
@@ -28,7 +26,7 @@ export class AppendTrustedHTML extends op('AppendTrustedHTML').void() {}
 export class AppendTextNode extends op('AppendTextNode').void() {}
 export class OpenComponent extends op('OpenComponent').args<{
   symbols: BlockSymbolTable;
-  selfClosing: boolean; // TODO: make this not required
+  selfClosing: boolean; // TODO make this not required
 }>() {}
 export class StaticArg extends op('StaticArg').args<{ name: pass1.SourceSlice }>() {}
 export class DynamicArg extends op('DynamicArg').args<{ name: pass1.SourceSlice }>() {}
@@ -71,6 +69,7 @@ export class EmptyParams extends op('EmptyParams').void() {}
 export class Hash extends op('Hash').args<{ entries: number }>() {}
 export class EmptyHash extends op('EmptyHash').void() {}
 export class HashPair extends op('HashPair').args<{ key: pass1.SourceSlice }>() {}
+export class Missing extends op('Missing').void() {}
 
 export type AnyArg = StaticArg | DynamicArg;
 
@@ -101,12 +100,13 @@ export type Expr =
   | Helper
   | HasBlock
   | HasBlockParams;
-export type Internal = Params | EmptyParams | Hash | EmptyHash | HashPair;
+export type Internal = Params | EmptyParams | Hash | EmptyHash | HashPair | Missing;
 export type Statement =
   | StartProgram
   | EndProgram
   | StartBlock
   | EndBlock
+  | InvokeInElement
   | Debugger
   | Yield
   | AppendTrustedHTML

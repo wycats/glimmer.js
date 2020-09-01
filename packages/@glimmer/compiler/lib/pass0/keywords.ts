@@ -3,7 +3,7 @@ import { ExpressionContext, Option } from '@glimmer/interfaces';
 import * as pass1 from '../pass1/ops';
 import { Context, ImmutableContext } from './context';
 import { HelperBlock, HelperExpression, HelperStatement, isPresent } from './is-node';
-import { mapPresent, PresentArray, toPresentOption } from '@glimmer/util';
+import { assertPresent, mapPresent, PresentArray, toPresentOption } from '@glimmer/util';
 
 interface KeywordPathNode<K extends string> extends AST.PathExpression {
   original: K;
@@ -81,7 +81,7 @@ class KeywordExpression<K extends string, V> {
 export const IN_ELEMENT = new KeywordBlock('in-element', {
   assert(
     statement: KeywordBlockNode<'in-element'>
-  ): { insertBefore?: AST.Expression; destination?: AST.Expression } {
+  ): { insertBefore?: AST.Expression; destination: AST.Expression } {
     let { hash } = statement;
 
     let insertBefore: AST.Expression | undefined = undefined;
@@ -100,11 +100,9 @@ export const IN_ELEMENT = new KeywordBlock('in-element', {
       }
     }
 
-    if (isPresent(statement.params)) {
-      destination = statement.params[0];
-    }
+    destination = assertPresent(statement.params)[0];
 
-    // TODO: Better syntax checks
+    // TODO Better syntax checks
 
     return { insertBefore, destination };
   },
@@ -112,7 +110,7 @@ export const IN_ELEMENT = new KeywordBlock('in-element', {
   translate(
     block: KeywordBlockNode<'in-element'>,
     ctx: Context,
-    { insertBefore, destination }: { insertBefore?: AST.Expression; destination?: AST.Expression }
+    { insertBefore, destination }: { insertBefore?: AST.Expression; destination: AST.Expression }
   ): pass1.Statement {
     let guid = ctx.cursor();
 
@@ -123,9 +121,7 @@ export const IN_ELEMENT = new KeywordBlock('in-element', {
           ? ctx.visitExpr(insertBefore, ExpressionContext.Expression)
           : undefined,
         guid,
-        destination: destination
-          ? ctx.visitExpr(destination, ExpressionContext.Expression)
-          : undefined,
+        destination: ctx.visitExpr(destination, ExpressionContext.Expression),
       })
       .loc(block);
   },
@@ -186,6 +182,13 @@ export const PARTIAL = new KeywordStatement('partial', {
 
     let hasParams = isPresent(params);
 
+    if (!hasParams) {
+      throw new SyntaxError(
+        `Partial found with no arguments. You must specify a template name. (on line ${loc.start.line})`,
+        statement.loc
+      );
+    }
+
     if (hasParams && params.length !== 1) {
       throw new SyntaxError(
         `Partial found with ${params.length} arguments. You must specify a template name. (on line ${loc.start.line})`,
@@ -195,7 +198,7 @@ export const PARTIAL = new KeywordStatement('partial', {
 
     if (isPresent(pairs)) {
       throw new SyntaxError(
-        `Partial found with no arguments. You must specify a template name. (on line ${loc.start.line})`,
+        `Partial does not take any named arguments (on line ${loc.start.line})`,
         statement.loc
       );
     }

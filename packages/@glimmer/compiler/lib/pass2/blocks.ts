@@ -15,11 +15,17 @@ export abstract class Block {
   push(...statements: out.Statement[]) {
     this.statements.push(...statements);
   }
+
+  abstract evalInfo: wire.Core.EvalInfo;
 }
 
 export class NamedBlock extends Block {
   constructor(public name: SourceSlice, public table: BlockSymbolTable) {
     super();
+  }
+
+  get evalInfo(): wire.Core.EvalInfo {
+    return this.table.getEvalInfo();
   }
 
   encode(): [name: string, block: SerializedInlineBlock] {
@@ -38,24 +44,27 @@ export class TemplateBlock extends Block {
   public yields = new DictSet<string>();
   public named = new DictSet<string>();
   public blocks: NamedBlock[] = [];
-  public hasEval = false;
 
-  constructor(private symbolTable: ProgramSymbolTable) {
+  constructor(private table: ProgramSymbolTable) {
     super();
+  }
+
+  get evalInfo(): wire.Core.EvalInfo {
+    return this.table.getEvalInfo();
   }
 
   encode(): SerializedTemplateBlock {
     return {
-      symbols: this.symbolTable.symbols,
+      symbols: this.table.symbols,
       statements: this.statements.map(s => s.encode()),
-      hasEval: this.hasEval,
-      upvars: this.symbolTable.freeVariables,
+      hasEval: this.table.hasEval,
+      upvars: this.table.freeVariables,
     };
   }
 }
 
 export class ComponentBlock extends Block {
-  public attrs: out.Attr[] = [];
+  public attrs: out.ElementParameter[] = [];
   public args: out.Arg[] = [];
   private inParams = true;
   public positionals: number[] = [];
@@ -69,6 +78,10 @@ export class ComponentBlock extends Block {
     super();
   }
 
+  get evalInfo(): wire.Core.EvalInfo {
+    return this.table.getEvalInfo();
+  }
+
   push(...statements: out.Statement[]) {
     for (let statement of statements) {
       if (this.inParams) {
@@ -76,7 +89,7 @@ export class ComponentBlock extends Block {
           this.inParams = false;
         } else if (out.isArg(statement)) {
           this.args.push(statement);
-        } else if (out.isAttr(statement)) {
+        } else if (out.isElementParameter(statement)) {
           this.attrs.push(statement);
         } else {
           throw new Error('Compile Error: only parameters allowed before flush-element');
@@ -129,12 +142,8 @@ export class ComponentBlock extends Block {
 export class Template {
   public block: TemplateBlock;
 
-  constructor(private symbols: ProgramSymbolTable) {
+  constructor(symbols: ProgramSymbolTable) {
     this.block = new TemplateBlock(symbols);
-  }
-
-  get evalInfo(): wire.Core.EvalInfo {
-    return this.symbols.getEvalInfo();
   }
 
   encode(): SerializedTemplateBlock {

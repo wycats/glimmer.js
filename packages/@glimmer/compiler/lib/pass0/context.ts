@@ -86,7 +86,7 @@ export class Context implements ImmutableContext {
   private opFactory: OpFactory<pass1.Statement>;
   private exprFactory: OpFactory<pass1.Expr>;
 
-  constructor(readonly source: string, visitor: Pass0Visitor) {
+  constructor(readonly source: string, readonly options: CompileOptions, visitor: Pass0Visitor) {
     this.helper = new CompilerHelper(this);
     this.statements = visitor.statements;
     this.expressions = visitor.expressions;
@@ -96,6 +96,14 @@ export class Context implements ImmutableContext {
 
   get symbols() {
     return this.state.symbols;
+  }
+
+  customizeComponentName(input: string): string {
+    if (this.options.customizeComponentName) {
+      return this.options.customizeComponentName(input);
+    } else {
+      return input;
+    }
   }
 
   cursor(): string {

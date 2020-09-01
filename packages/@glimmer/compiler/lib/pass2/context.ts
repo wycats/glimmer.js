@@ -113,16 +113,6 @@ export class Context {
     }
   }
 
-  customizeComponentName(name: string): string {
-    let customize = this.options?.customizeComponentName;
-
-    if (customize) {
-      return customize(name);
-    } else {
-      return name;
-    }
-  }
-
   assertStackHas(size: number) {
     assert(
       this.#state.values.length >= size,
@@ -222,7 +212,7 @@ export class Context {
   //   this.#state.values.push(val);
   // }
 
-  popValue<T extends StackValue>(check: Check<T, StackValue | undefined>): T {
+  popValue<T extends StackValue | undefined>(check: Check<T, StackValue | undefined>): T {
     let stack = this.#state.values;
     let value = stack.pop();
 

@@ -44,6 +44,28 @@ export const ANY: Check<out.StackValue> = {
   },
 };
 
+export const MAYBE_EXPR: Check<out.Expr | out.Missing, out.StackValue> = {
+  name: 'Expr?',
+  match(value: out.StackValue): value is out.Expr | out.Missing {
+    switch (value.name) {
+      case 'Missing':
+      case 'Undefined':
+      case 'Value':
+      case 'GetSymbol':
+      case 'GetContextualFree':
+      case 'GetFree':
+      case 'GetPath':
+      case 'Concat':
+      case 'Call':
+      case 'HasBlock':
+      case 'HasBlockParams':
+        return true;
+      default:
+        return false;
+    }
+  },
+};
+
 export const EXPR: Check<out.Expr> = {
   name: 'Expr',
   match(value: out.StackValue): value is out.Expr {

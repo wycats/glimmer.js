@@ -38,9 +38,12 @@ APPEND_OPCODES.add(
 
       for (let i = 0; i < evalInfo.length; i++) {
         let slot = evalInfo[i];
-        let name = outerSymbols[slot - 1];
-        let ref = outerScope.getSymbol(slot);
-        locals[name] = ref;
+
+        if (slot !== -1) {
+          let name = outerSymbols[slot - 1];
+          let ref = outerScope.getSymbol(slot);
+          locals[name] = ref;
+        }
       }
 
       if (evalScope) {

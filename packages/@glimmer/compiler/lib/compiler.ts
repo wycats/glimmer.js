@@ -72,7 +72,7 @@ export function precompileJSON(
   options: PrecompileOptions = defaultOptions
 ): SerializedTemplateBlock {
   let ast = preprocess(string, options);
-  let pass1In = pass0(string, ast);
+  let pass1In = pass0(string, ast, options);
   let pass2In = pass1(string, pass1In);
   let pass2Out = pass2(string, pass2In, options);
   let block = pass2Out.encode();

@@ -15,16 +15,24 @@ class Pass1Statements implements Pass1StatementsVisitor {
   }
 
   Debugger(_: OpArgs<pass1.Debugger>, ctx: Context): pass2.Op {
+    ctx.setHasEval();
     return ctx.op(pass2.Debugger);
   }
 
-  InElement(_: OpArgs<pass1.InElement>, _ctx: Context): pass2.Op {
-    // it really doesn't make sense to turn this back into something handled by a macro
-    // downstream
-    throw new Error('unimplemented');
+  InElement(
+    { destination, guid, insertBefore, block }: OpArgs<pass1.InElement>,
+    ctx: Context
+  ): pass2.Op[] {
+    return ctx.ops(
+      ctx.visitOptionalExpr(insertBefore),
+      ctx.visitExpr(destination),
+      ctx.visitStmt(block),
+      ctx.op(pass2.InvokeInElement, { guid })
+    );
   }
 
   Partial({ expr }: OpArgs<pass1.Partial>, ctx: Context): pass2.Op[] {
+    ctx.setHasEval();
     return ctx.ops(ctx.visitExpr(expr), ctx.op(pass2.Partial));
   }
 

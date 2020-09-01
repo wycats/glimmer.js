@@ -119,7 +119,9 @@ export class Params extends out(
   'Params',
   ({ list }: { list: [Expr, ...Expr[]] }) => list.map(l => l.encode()) as wire.Core.ConcatParams
 ) {}
-
+export class Missing extends out('Missing', (): never => {
+  throw new Error(`Internal Missing operation is not encodable`);
+}) {}
 export class EmptyParams extends out('EmptyParams', (): null => null) {}
 export class Hash extends out(
   'Hash',
@@ -150,7 +152,7 @@ export class EmptyHash extends out('EmptyHash', (): null => null) {}
 
 export type AnyParams = Params | EmptyParams;
 export type AnyHash = Hash | EmptyHash;
-export type Temporary = AnyParams | AnyHash | AnyNamedBlocks | HashPair | SourceSlice;
+export type Temporary = AnyParams | AnyHash | AnyNamedBlocks | HashPair | Missing | SourceSlice;
 
 /** #---- EXPRESSIONS ----# */
 
@@ -271,12 +273,30 @@ export class Yield extends stmt(
 
 export class InElement extends stmt(
   'InElement',
-  (args: { guid: string; insertBefore: Expr; destination?: Expr }): wire.Statements.InElement => [
-    op.InElement,
-    args.guid,
-    args.insertBefore.encode(),
-    args.destination?.encode(),
-  ]
+  (args: {
+    guid: string;
+    block: NamedBlock;
+    destination: Expr;
+    insertBefore: Expr | Missing;
+  }): wire.Statements.InElement => {
+    let block = args.block.encode()[1];
+    let guid = args.guid;
+    let destination = args.destination.encode();
+    let insertBefore = args.insertBefore;
+
+    if (insertBefore.name === 'Missing') {
+      return [op.InElement, block, guid, destination];
+    } else {
+      return [op.InElement, block, guid, destination, insertBefore.encode()];
+    }
+  }
+  //  [
+  //   op.InElement,
+  //   args.block.encode()[1],
+  //   args.guid,
+  //   args.destination.encode(),
+  //   ...[args.insertBefore.name === 'Missing' ? [] : [args.insertBefore.encode()]],
+  // ]
 ) {}
 
 export class EmptyNamedBlocks extends out('EmptyNamedBlocks', (): wire.Core.Blocks => null) {}
@@ -408,7 +428,9 @@ export type Attr =
   | TrustingDynamicAttr
   | TrustingComponentAttr;
 
-export function isAttr(statement: Stmt): statement is Attr {
+export type ElementParameter = Attr | Modifier | AttrSplat;
+
+export function isElementParameter(statement: Stmt): statement is ElementParameter {
   switch (statement.name) {
     case 'StaticAttr':
     case 'StaticComponentAttr':
@@ -416,6 +438,7 @@ export function isAttr(statement: Stmt): statement is Attr {
     case 'DynamicAttr':
     case 'TrustingDynamicAttr':
     case 'TrustingComponentAttr':
+    case 'Modifier':
     case 'AttrSplat':
       return true;
     default:
@@ -512,4 +535,32 @@ export function encodeHash<T, U>(list: T[], callback: (value: T) => [string, U])
   }
 
   return [keys, values];
+}
+
+type ExprOp = wire.Expression | wire.Expression[] | undefined;
+
+class PushExpr {
+  #out: wire.Expression[] = [];
+
+  finish(): wire.Expression[] {
+    return this.#out;
+  }
+
+  expr(op: wire.Expression | undefined): this {
+    if (op) {
+      this.#out.push(op);
+    }
+    return this;
+  }
+
+  exprs(...op: wire.Expression[]): this {
+    this.#out.push(...op);
+    return this;
+  }
+}
+
+function exprs(push: (exprs: PushExpr) => void): wire.Expression[] {
+  let pushExpr = new PushExpr();
+  push(pushExpr);
+  return pushExpr.finish();
 }

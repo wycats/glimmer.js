@@ -9,16 +9,18 @@ import {
   WellKnownAttrName,
   WellKnownTagName,
 } from '@glimmer/interfaces';
-import { $sp } from '@glimmer/vm';
 import { EMPTY_STRING_ARRAY } from '@glimmer/util';
+import { $sp } from '@glimmer/vm';
+import { getStringFromValue, isStringLiteral } from '@glimmer/wire-format';
+import { compilableBlock } from '../compilable-template';
 import { op } from '../opcode-builder/encoder';
-import { YieldBlock } from '../opcode-builder/helpers/blocks';
+import { InvokeStaticBlock, YieldBlock } from '../opcode-builder/helpers/blocks';
 import { InvokeComponent, InvokeStaticComponent } from '../opcode-builder/helpers/components';
 import { ReplayableIf } from '../opcode-builder/helpers/conditional';
+import { PushPrimitive, PushPrimitiveReference } from '../opcode-builder/helpers/vm';
 import { arr, strArray, templateMeta } from '../opcode-builder/operands';
 import { expectSloppyFreeVariable, isStrictFreeVariable, trySloppyFreeVariable } from '../utils';
 import { Compilers } from './compilers';
-import { getStringFromValue, isStringLiteral } from '@glimmer/wire-format';
 
 export const STATEMENTS = new Compilers<StatementSexpOpcode, StatementCompileActions>();
 
@@ -233,4 +235,34 @@ STATEMENTS.add(SexpOpcodes.TrustingAppend, (sexp) => {
 
 STATEMENTS.add(SexpOpcodes.Block, (sexp) => {
   return op('CompileBlock', sexp);
+});
+
+STATEMENTS.add(SexpOpcodes.InElement, ([, block, guid, destination, insertBefore], meta) => {
+  return ReplayableIf({
+    args() {
+      let actions: StatementCompileActions = [];
+
+      debugger;
+      // this order is important
+      actions.push(op('Expr', guid));
+
+      if (insertBefore === undefined) {
+        actions.push(PushPrimitiveReference(undefined));
+      } else {
+        actions.push(op('Expr', insertBefore));
+      }
+
+      actions.push(op('Expr', destination), op(Op.Dup, $sp, 0));
+
+      return { count: 4, actions };
+    },
+
+    ifTrue() {
+      return [
+        op(Op.PushRemoteElement),
+        InvokeStaticBlock(compilableBlock(block, meta)),
+        op(Op.PopRemoteElement),
+      ];
+    },
+  });
 });

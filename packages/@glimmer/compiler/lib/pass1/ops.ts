@@ -101,7 +101,7 @@ export class Partial extends op('Partial').args<{ expr: Expr }>() {}
 export class Debugger extends op('Debugger').void() {}
 
 export class InElement extends op('InElement').args<{
-  destination?: Expr;
+  destination: Expr;
   guid: string;
   insertBefore?: Expr;
   block: Block;
@@ -128,7 +128,7 @@ export class Block extends op('Block').args<{
   body: Statement[];
 }>() {}
 
-// TODO: Make Component have the same structure as BlockInvocation, and
+// TODO Make Component have the same structure as BlockInvocation, and
 // make named blocks just normal blocks in the invocation
 export class OpenNamedBlock extends op('OpenNamedBlock').args<{
   tag: SourceSlice;

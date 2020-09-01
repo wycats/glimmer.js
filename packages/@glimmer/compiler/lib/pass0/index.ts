@@ -17,12 +17,13 @@ import {
 import { HAS_BLOCK, HAS_BLOCK_PARAMS } from './keywords';
 import { STATEMENTS } from './statements';
 
-export function visit(source: string, root: AST.Template): pass1.Template {
-  let ctx = new Context(source, {
+export function visit(source: string, root: AST.Template, options: CompileOptions): pass1.Template {
+  let ctx = new Context(source, options, {
     expressions: EXPRESSIONS,
     statements: STATEMENTS,
   });
 
+  debugger;
   let symbols = ctx.symbols.current as ProgramSymbolTable;
   let body = ctx.mapIntoStatements(root.body, stmt => ctx.visitStmt(stmt));
 
@@ -99,6 +100,10 @@ export class CompilerHelper {
   }
 
   modifier(modifier: AST.ElementModifierStatement): pass1.Statement[] {
+    if (isHelperInvocation(modifier)) {
+      assertIsSimpleHelper(modifier, modifier.loc, 'modifier');
+    }
+
     return this.ctx.ops(
       this.ctx
         .op(pass1.Modifier, {
