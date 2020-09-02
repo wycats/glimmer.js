@@ -1,3 +1,9 @@
+---
+noteId: "5d0de690ecd611ea8388874e1424078a"
+tags: []
+
+---
+
 The Glimmer preprocessor is responsible for taking templates and converting them into the Wire Format.
 
 The input to the preprocessor is _the AST_. The AST is the result of parsing a template via `@glimmer/syntax`.
