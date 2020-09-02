@@ -104,7 +104,7 @@ export class InElement extends op('InElement').args<{
   destination: Expr;
   guid: string;
   insertBefore?: Expr;
-  block: Block;
+  block: NamedBlock;
 }>() {}
 
 export class AppendTextNode extends op('AppendTextNode').args<{ value: Expr }>() {}
@@ -115,14 +115,14 @@ export class BlockInvocation extends op('BlockInvocation').args<{
   head: Expr;
   params: Params;
   hash: Hash;
-  blocks: Block[];
+  blocks: NamedBlock[];
 }>() {}
 
-export function getBlock(blocks: Block[], name: string): Block | undefined {
+export function getBlock(blocks: NamedBlock[], name: string): NamedBlock | undefined {
   return blocks.find(block => block.args.name.getString() === name);
 }
 
-export class Block extends op('Block').args<{
+export class NamedBlock extends op('Block').args<{
   name: SourceSlice;
   symbols: BlockSymbolTable;
   body: Statement[];
@@ -172,7 +172,7 @@ export type Statement =
   | InElement
   | Partial
   | BlockInvocation
-  | Block
+  | NamedBlock
   | AppendTextNode
   | AppendTrustedHTML
   | AppendComment

@@ -17,7 +17,7 @@ import { op } from '../opcode-builder/encoder';
 import { InvokeStaticBlock, YieldBlock } from '../opcode-builder/helpers/blocks';
 import { InvokeComponent, InvokeStaticComponent } from '../opcode-builder/helpers/components';
 import { ReplayableIf } from '../opcode-builder/helpers/conditional';
-import { PushPrimitive, PushPrimitiveReference } from '../opcode-builder/helpers/vm';
+import { PushPrimitiveReference } from '../opcode-builder/helpers/vm';
 import { arr, strArray, templateMeta } from '../opcode-builder/operands';
 import { expectSloppyFreeVariable, isStrictFreeVariable, trySloppyFreeVariable } from '../utils';
 import { Compilers } from './compilers';

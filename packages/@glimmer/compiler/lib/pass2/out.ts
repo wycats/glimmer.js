@@ -290,13 +290,6 @@ export class InElement extends stmt(
       return [op.InElement, block, guid, destination, insertBefore.encode()];
     }
   }
-  //  [
-  //   op.InElement,
-  //   args.block.encode()[1],
-  //   args.guid,
-  //   args.destination.encode(),
-  //   ...[args.insertBefore.name === 'Missing' ? [] : [args.insertBefore.encode()]],
-  // ]
 ) {}
 
 export class EmptyNamedBlocks extends out('EmptyNamedBlocks', (): wire.Core.Blocks => null) {}
@@ -535,32 +528,4 @@ export function encodeHash<T, U>(list: T[], callback: (value: T) => [string, U])
   }
 
   return [keys, values];
-}
-
-type ExprOp = wire.Expression | wire.Expression[] | undefined;
-
-class PushExpr {
-  #out: wire.Expression[] = [];
-
-  finish(): wire.Expression[] {
-    return this.#out;
-  }
-
-  expr(op: wire.Expression | undefined): this {
-    if (op) {
-      this.#out.push(op);
-    }
-    return this;
-  }
-
-  exprs(...op: wire.Expression[]): this {
-    this.#out.push(...op);
-    return this;
-  }
-}
-
-function exprs(push: (exprs: PushExpr) => void): wire.Expression[] {
-  let pushExpr = new PushExpr();
-  push(pushExpr);
-  return pushExpr.finish();
 }

@@ -140,7 +140,7 @@ export class Context {
     return this.#ctx.factory.map(input, callback);
   }
 
-  // TODO: consider a more semantic approach here
+  // TODO consider a more semantic approach here
   get blocks(): Stack<Block> {
     return this.#state.blocks;
   }

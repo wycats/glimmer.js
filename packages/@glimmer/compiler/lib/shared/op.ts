@@ -1,7 +1,6 @@
 import { SourceLocation, SourcePosition } from '@glimmer/syntax';
-import { PresentArray } from '../../../util';
-import { positionToOffset } from '../location';
-import { SourceOffsets } from './location';
+import { PresentArray } from '@glimmer/util';
+import { positionToOffset, SourceOffsets } from './location';
 import { LocatedWithOffsets, LocatedWithPositions } from './ops';
 
 export type OpsTable<O extends Op> = {
@@ -12,8 +11,7 @@ export abstract class Op<Args = unknown> {
   abstract readonly name: string;
   constructor(readonly offsets: SourceOffsets | null, readonly args: Args) {}
 
-  // TODO:
-  // abstract stack = [{ value: EXPR }]
+  // TODO abstract stack = [{ value: EXPR }]
   // this would automate the process of extracting values off of the stack
   // and checking them for the right types
 }

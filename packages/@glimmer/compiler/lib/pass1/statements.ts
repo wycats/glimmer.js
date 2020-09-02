@@ -120,7 +120,7 @@ class Pass1Statements implements Pass1StatementsVisitor {
     );
   }
 
-  Block({ name, symbols, body }: OpArgs<pass1.Block>, ctx: Context): pass2.Op[] {
+  Block({ name, symbols, body }: OpArgs<pass1.NamedBlock>, ctx: Context): pass2.Op[] {
     return ctx.withBlock(symbols, () =>
       ctx.ops(
         ctx.op(pass2.StartBlock, { name, symbols }),

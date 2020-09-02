@@ -505,14 +505,14 @@ export function extractAngleInvocation(input: string): Option<string> {
 }
 
 export function isAngleInvocation(input: [string, ...unknown[]]): input is InvocationElement {
-  // TODO: Paths
+  // TODO Paths
   let match = input[0].match(/^<(@[a-zA-Z0-9]*|[A-Z][a-zA-Z0-9\-]*)>$/);
 
   return !!match && !!match[1];
 }
 
 export function isBlock(input: [string, ...unknown[]]): input is BuilderBlockStatement {
-  // TODO: Paths
+  // TODO Paths
   let match = input[0].match(/^#[^]?([a-zA-Z0-9]*|[A-Z][a-zA-Z0-9\-]*)$/);
 
   return !!match && !!match[1];
@@ -550,7 +550,7 @@ export type TupleBuilderExpression =
   | [Builder.Literal, string | boolean | null | undefined]
   | [Builder.Get, string]
   | [Builder.Get, string, string[]]
-  | [Builder.Concat, ...any[]] // TODO: replace with recursive types in TS3.7
+  | [Builder.Concat, ...any[]] // TODO replace with recursive types in TS3.7
   | [Builder.HasBlock, string]
   | [Builder.HasBlockParams, string]
   | BuilderCallExpression;

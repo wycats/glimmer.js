@@ -1,28 +1,31 @@
 import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST, isLiteral, SourceLocation } from '@glimmer/syntax';
-import { assign } from '@glimmer/util';
-import * as pass1 from '../pass1/ops';
-import { BlockSymbolTable, SymbolTable } from '../shared/symbol-table';
-import { Context, Pass0Visitor } from './context';
-import { assertIsSimpleHelper, hasPath, isHelperInvocation, isKeywordCall } from './is-node';
-import { DEBUGGER, IN_ELEMENT, PARTIAL, YIELD } from './keywords';
+import { assign, PresentArray } from '@glimmer/util';
+import * as pass1 from '../../pass1/ops';
+import { UnlocatedOp } from '../../shared/op';
+import { BlockSymbolTable, SymbolTable } from '../../shared/symbol-table';
+import { attr } from '../utils/attrs';
+import { buildArgs, buildHash, buildParams } from '../utils/builders';
+import { Context, StatementVisitor } from '../context';
+import { assertIsSimpleHelper, isHelperInvocation } from '../utils/is-node';
+import { BLOCK_KEYWORDS, EXPR_KEYWORDS, STATEMENT_KEYWORDS } from '../keywords';
 
-type Pass0StatementsVisitor = Pass0Visitor['statements'];
-
-class Pass0Statements implements Pass0StatementsVisitor {
+class Pass0Statements implements StatementVisitor {
   PartialStatement(): never {
     throw new Error(`Handlebars partials are not supported in Glimmer`);
   }
 
   BlockStatement(block: AST.BlockStatement, ctx: Context): pass1.Statement {
-    if (IN_ELEMENT.match(block)) {
-      return IN_ELEMENT.translate(block, ctx);
+    if (BLOCK_KEYWORDS.match(block)) {
+      return BLOCK_KEYWORDS.translate(block, ctx);
     } else {
-      let defaultBlock = ctx.visitBlock(ctx.slice('default').offsets(null), block.program);
-      let inverseBlock = block.inverse
-        ? [ctx.visitBlock(ctx.slice('else').offsets(null), block.inverse)]
-        : [];
-      let blocks = [defaultBlock, ...inverseBlock];
+      let blocks: PresentArray<pass1.NamedBlock> = [
+        ctx.visitBlock(ctx.slice('default').offsets(null), block.program),
+      ];
+
+      if (block.inverse) {
+        blocks.push(ctx.visitBlock(ctx.slice('else').offsets(null), block.inverse));
+      }
 
       return ctx
         .op(
@@ -31,7 +34,7 @@ class Pass0Statements implements Pass0StatementsVisitor {
             {
               head: ctx.visitExpr(block.path, ExpressionContext.BlockHead),
             },
-            ctx.helper.args(block),
+            buildArgs(ctx, block),
             { blocks }
           )
         )
@@ -43,7 +46,7 @@ class Pass0Statements implements Pass0StatementsVisitor {
     return ctx.withBlock(element, (child, parent) => {
       let classify = classifyElement(element, parent, child);
 
-      // are `@args` are allowed?
+      // are `@args` allowed?
       let hasComponentFeatures =
         classify.is === 'component' ||
         classify.is === 'has-dynamic-features' ||
@@ -63,10 +66,10 @@ class Pass0Statements implements Pass0StatementsVisitor {
       } else {
         return ctx.ops(
           openElementOp(ctx, classify),
-          ctx.mapIntoStatements(attributes(element.attributes), attr =>
-            ctx.helper.attr(attr, hasComponentFeatures, element)
+          ctx.mapIntoStatements(attributes(element.attributes), statement =>
+            attr(ctx, statement, hasComponentFeatures, element)
           ),
-          ctx.mapIntoStatements(element.modifiers, modifier => ctx.helper.modifier(modifier)),
+          ctx.mapIntoStatements(element.modifiers, statement => modifier(ctx, statement)),
           ctx.ops(
             ctx.op(pass1.FlushElement, { symbols: child }).loc(element),
             ctx.mapIntoStatements(element.children, stmt => ctx.visitStmt(stmt)),
@@ -86,35 +89,25 @@ class Pass0Statements implements Pass0StatementsVisitor {
     let { path } = mustache;
 
     if (isLiteral(path)) {
-      return ctx.appendExpr(path, { trusted: !mustache.escaped }).loc(mustache);
+      return appendExpr(ctx, path, { trusted: !mustache.escaped }).loc(mustache);
     }
 
-    if (hasPath(mustache)) {
-      if (YIELD.match(mustache)) {
-        return YIELD.translate(mustache, ctx);
-      }
-
-      if (PARTIAL.match(mustache)) {
-        return PARTIAL.translate(mustache, ctx);
-      }
-
-      if (DEBUGGER.match(mustache)) {
-        return DEBUGGER.translate(mustache, ctx);
-      }
+    if (STATEMENT_KEYWORDS.match(mustache)) {
+      return STATEMENT_KEYWORDS.translate(mustache, ctx);
     }
 
     // {{has-block}} or {{has-block-params}}
-    if (isKeywordCall(mustache)) {
-      return ctx.append(ctx.helper.keyword(mustache), { trusted: !mustache.escaped }).loc(mustache);
+    if (EXPR_KEYWORDS.match(mustache)) {
+      return ctx
+        .append(EXPR_KEYWORDS.translate(mustache, ctx), { trusted: !mustache.escaped })
+        .loc(mustache);
     }
 
     if (!isHelperInvocation(mustache)) {
-      return ctx
-        .appendExpr(mustache.path, {
-          trusted: !mustache.escaped,
-          context: mustacheContext(mustache.path),
-        })
-        .loc(mustache);
+      return appendExpr(ctx, mustache.path, {
+        trusted: !mustache.escaped,
+        context: mustacheContext(mustache.path),
+      }).loc(mustache);
     }
 
     assertIsSimpleHelper(mustache, mustache.loc, 'helper');
@@ -128,7 +121,7 @@ class Pass0Statements implements Pass0StatementsVisitor {
               {
                 head: ctx.visitExpr(mustache.path, ExpressionContext.CallHead),
               },
-              ctx.helper.args(mustache)
+              buildArgs(ctx, mustache)
             )
           )
           .loc(mustache),
@@ -156,7 +149,42 @@ class Pass0Statements implements Pass0StatementsVisitor {
   }
 }
 
-export const STATEMENTS = new Pass0Statements();
+export const STATEMENTS: StatementVisitor = new Pass0Statements();
+
+function modifier(ctx: Context, modifier: AST.ElementModifierStatement): pass1.Statement[] {
+  if (isHelperInvocation(modifier)) {
+    assertIsSimpleHelper(modifier, modifier.loc, 'modifier');
+  }
+
+  return ctx.ops(
+    ctx
+      .op(pass1.Modifier, {
+        head: ctx.visitExpr(modifier.path, ExpressionContext.ModifierHead),
+        params: buildParams(ctx, { path: modifier.path, params: modifier.params }),
+        hash: buildHash(ctx, modifier.hash),
+      })
+      .loc(modifier)
+  );
+}
+
+function appendExpr(
+  ctx: Context,
+  expr: AST.Expression,
+  {
+    context = ExpressionContext.Expression,
+    trusted,
+  }: { trusted: boolean; context?: ExpressionContext }
+): UnlocatedOp<pass1.Statement> {
+  if (trusted) {
+    return ctx.op(pass1.AppendTrustedHTML, {
+      value: ctx.visitExpr(expr, context),
+    });
+  } else {
+    return ctx.op(pass1.AppendTextNode, {
+      value: ctx.visitExpr(expr, context),
+    });
+  }
+}
 
 type ClassifiedElement =
   | {

@@ -1,14 +1,35 @@
 import { ExpressionContext, Option } from '@glimmer/interfaces';
 import { AST } from '@glimmer/syntax';
-import { assert, NonemptyStack, PresentArray, toPresentOption } from '@glimmer/util';
-import { positionToOffset } from '../location';
+import { assert, isPresent, NonemptyStack, PresentArray } from '@glimmer/util';
+import { positionToOffset, SourceOffsets } from '../shared/location';
 import * as pass1 from '../pass1/ops';
-import { SourceOffsets } from '../shared/location';
 import { InputOpArgs, OpConstructor, UnlocatedOp } from '../shared/op';
 import { OpFactory, Ops } from '../shared/ops';
 import { BlockSymbolTable, SymbolTable } from '../shared/symbol-table';
-import { CompilerHelper } from './index';
-import { isPresent } from './is-node';
+import { buildPathWithContext } from './utils/builders';
+
+/** VISITOR DEFINITIONS */
+
+type NodeFor<N extends AST.BaseNode, K extends N['type']> = N extends { type: K } ? N : never;
+
+type Visitors<N extends AST.BaseNode, Out extends pass1.AnyOp[] | pass1.AnyOp> = {
+  [P in N['type']]: (node: NodeFor<N, P>, ctx: Context) => Out;
+};
+
+export type StatementVisitor = Visitors<AST.Statement, pass1.Statement | pass1.Statement[]>;
+export type ExpressionVisitor = Visitors<AST.Expression | AST.ConcatStatement, pass1.Expr>;
+
+type VisitorFunc<N extends AST.BaseNode, Out extends pass1.AnyOp[] | pass1.AnyOp> = (
+  node: N,
+  ctx: Context
+) => Out;
+
+type StatementVisitorFunc = VisitorFunc<AST.Statement, pass1.Statement | pass1.Statement[]>;
+type ExpressionVisitorFunc = VisitorFunc<AST.Expression, pass1.Expr>;
+
+export interface ImmutableContext {
+  slice(value: string): UnlocatedOp<pass1.SourceSlice>;
+}
 
 /**
  * This is the mutable state for this compiler pass.
@@ -22,55 +43,6 @@ export class CompilerState {
   }
 }
 
-type NodeFor<N extends AST.BaseNode, K extends N['type']> = N extends { type: K } ? N : never;
-
-type Visitors<N extends AST.BaseNode, OpKind> = {
-  [P in N['type']]: (node: NodeFor<N, P>, ctx: Context) => OpKind[] | OpKind;
-};
-
-type VisitorFunc<N extends AST.BaseNode, OpKind> = (node: N, ctx: Context) => OpKind[] | OpKind;
-
-type OneToOneVisitors<N extends AST.BaseNode, OpKind> = {
-  [P in N['type']]: (node: NodeFor<N, P>, ctx: Context) => OpKind;
-};
-
-type OneToOneVisitorFunc<N extends AST.BaseNode, OpKind> = (node: N, ctx: Context) => OpKind;
-
-function visitExpr<N extends AST.Expression, Pass1Expr>(
-  visitors: OneToOneVisitors<N, Pass1Expr>,
-  node: N,
-  ctx: Context
-): Pass1Expr {
-  let f = visitors[node.type as N['type']] as OneToOneVisitorFunc<N, Pass1Expr>;
-  return f(node, ctx);
-}
-
-function visit<N extends AST.BaseNode, OpKind>(
-  visitors: Visitors<N, OpKind>,
-  node: N,
-  ctx: Context
-): OpKind[] {
-  let f = visitors[node.type as N['type']] as VisitorFunc<N, OpKind>;
-  let result = f(node, ctx);
-
-  if (Array.isArray(result)) {
-    return result;
-  } else {
-    return [result];
-  }
-}
-
-export type StatementVisitors = Visitors<AST.Statement, pass1.Statement>;
-
-export interface Pass0Visitor {
-  expressions: OneToOneVisitors<AST.Expression | AST.ConcatStatement, pass1.Expr>;
-  statements: StatementVisitors;
-}
-
-export interface ImmutableContext {
-  slice(value: string): UnlocatedOp<pass1.SourceSlice>;
-}
-
 /**
  * All state in this object except the CompilerState must be readonly.
  *
@@ -79,15 +51,17 @@ export interface ImmutableContext {
  * has no mutable state at all.
  */
 export class Context implements ImmutableContext {
-  readonly statements: StatementVisitors;
-  readonly expressions: OneToOneVisitors<AST.Expression | AST.ConcatStatement, pass1.Expr>;
+  readonly statements: StatementVisitor;
+  readonly expressions: ExpressionVisitor;
   readonly state = new CompilerState();
-  readonly helper: CompilerHelper;
   private opFactory: OpFactory<pass1.Statement>;
   private exprFactory: OpFactory<pass1.Expr>;
 
-  constructor(readonly source: string, readonly options: CompileOptions, visitor: Pass0Visitor) {
-    this.helper = new CompilerHelper(this);
+  constructor(
+    readonly source: string,
+    readonly options: CompileOptions,
+    visitor: { statements: StatementVisitor; expressions: ExpressionVisitor }
+  ) {
     this.statements = visitor.statements;
     this.expressions = visitor.expressions;
     this.opFactory = new OpFactory(source);
@@ -131,30 +105,8 @@ export class Context implements ImmutableContext {
     return this.opFactory.ops(...ops);
   }
 
-  exprs(...ops: (pass1.Expr | pass1.Expr[])[]): pass1.Expr[] {
-    return this.exprFactory.ops(...ops);
-  }
-
   mapIntoStatements<T>(input: T[], callback: (input: T) => pass1.Statement[]): pass1.Statement[] {
     return this.opFactory.map(input, callback);
-  }
-
-  appendExpr(
-    expr: AST.Expression,
-    {
-      context = ExpressionContext.Expression,
-      trusted,
-    }: { trusted: boolean; context?: ExpressionContext }
-  ): UnlocatedOp<pass1.Statement> {
-    if (trusted) {
-      return this.op(pass1.AppendTrustedHTML, {
-        value: this.visitExpr(expr, context),
-      });
-    } else {
-      return this.op(pass1.AppendTextNode, {
-        value: this.visitExpr(expr, context),
-      });
-    }
   }
 
   append(expr: pass1.Expr, { trusted }: { trusted: boolean }): UnlocatedOp<pass1.Statement> {
@@ -167,41 +119,6 @@ export class Context implements ImmutableContext {
         value: expr,
       });
     }
-  }
-
-  params(input: AST.Expression[]): pass1.Params {
-    let out: pass1.Expr[] = [];
-
-    for (let expr of input) {
-      out.push(this.visitExpr(expr, ExpressionContext.Expression));
-    }
-
-    let params = this.expr(pass1.Params, { list: toPresentOption(out) });
-
-    if (isPresent(out)) {
-      let first = out[0];
-      let last = out[out.length - 1];
-
-      return params.offsets(range(first, last));
-    } else {
-      return params.offsets(null);
-    }
-  }
-
-  hash(input: AST.Hash): pass1.Hash {
-    let out: pass1.HashPair[] = [];
-
-    for (let pair of input.pairs) {
-      let keyOffsets = offsetsForHashKey(pair, this.source);
-      let outPair = this.expr(pass1.HashPair, {
-        key: this.slice(pair.key).offsets(keyOffsets),
-        value: this.visitExpr(pair.value, ExpressionContext.Expression),
-      }).loc(pair);
-
-      out.push(outPair);
-    }
-
-    return this.expr(pass1.Hash, { pairs: out }).loc(input);
   }
 
   mapIntoExprs<E extends pass1.Expr, T>(
@@ -243,9 +160,10 @@ export class Context implements ImmutableContext {
     context: ExpressionContext = ExpressionContext.Expression
   ): pass1.Expr {
     if (node.type === 'PathExpression') {
-      return this.helper.pathWithContext(node, context);
+      return buildPathWithContext(this, node, context);
     } else {
-      return visitExpr(this.expressions, node, this);
+      let f = this.expressions[node.type] as ExpressionVisitorFunc;
+      return f(node, this);
     }
   }
 
@@ -253,36 +171,26 @@ export class Context implements ImmutableContext {
     if (node === null) {
       return [];
     } else {
-      return visit(this.statements, node, this);
+      let f = this.statements[node.type] as StatementVisitorFunc;
+      let result = f(node, this);
+
+      if (Array.isArray(result)) {
+        return result;
+      } else {
+        return [result];
+      }
     }
   }
 
-  visitBlock(name: pass1.SourceSlice, node: null): null;
-  visitBlock(name: pass1.SourceSlice, node: AST.Block): pass1.Block;
-  visitBlock(name: pass1.SourceSlice, node: AST.Block | null): pass1.Block | null {
-    if (node === null) {
-      return null;
-    } else {
-      return this.withBlock(node, symbols =>
-        this.op(pass1.Block, {
-          name,
-          symbols,
-          body: this.mapIntoStatements(node.body, stmt => this.visitStmt(stmt)),
-        }).loc(node)
-      );
-    }
+  visitBlock(name: pass1.SourceSlice, node: AST.Block): pass1.NamedBlock {
+    return this.withBlock(node, symbols =>
+      this.op(pass1.NamedBlock, {
+        name,
+        symbols,
+        body: this.mapIntoStatements(node.body, stmt => this.visitStmt(stmt)),
+      }).loc(node)
+    );
   }
-}
-
-function range(
-  first: { offsets: SourceOffsets | null },
-  last: { offsets: SourceOffsets | null }
-): SourceOffsets | null {
-  if (first.offsets === null || last.offsets === null) {
-    return null;
-  }
-
-  return { start: first.offsets.start, end: last.offsets.end };
 }
 
 export function paramsOffsets(
@@ -338,7 +246,7 @@ export function sourceOffsets(
   let { start, end } = loc;
   let startOffset = positionToOffset(source, { line: start.line - 1, column: start.column });
 
-  // TODO: Is it important to support buggy transformations? Should we have a strict mode to start ferreting them out?
+  // TODO Is it important to support buggy transformations? Should we have a strict mode to start ferreting them out?
   // assert(
   //   startOffset !== null,
   //   `unexpected offset (${start.line}:${start.column}) that didn't correspond to a source location`

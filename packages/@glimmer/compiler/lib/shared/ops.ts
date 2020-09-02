@@ -1,6 +1,5 @@
 import { SourceLocation, SourcePosition } from '@glimmer/syntax';
-import { positionToOffset } from '../location';
-import { SourceOffsets } from './location';
+import { positionToOffset, SourceOffsets } from './location';
 import { InputOpArgs, Op, OpConstructor, toArgs, UnlocatedOp } from './op';
 
 export type ArgsMap<K extends string | number> = {
