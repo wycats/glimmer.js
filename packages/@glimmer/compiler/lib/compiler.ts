@@ -6,9 +6,9 @@ import {
 } from '@glimmer/interfaces';
 import { LOCAL_SHOULD_LOG } from '@glimmer/local-debug-flags';
 import { preprocess, PreprocessOptions } from '@glimmer/syntax';
-import { visit as pass0 } from './pass0/index';
-import { visit as pass1 } from './pass1/index';
-import { visit as pass2 } from './pass2/index';
+import { visit as pass0 } from './passes/pass0/index';
+import { visit as pass1 } from './passes/pass1/index';
+import { visit as pass2 } from './passes/pass2/index';
 
 export interface TemplateIdFn {
   (src: string): Option<string>;

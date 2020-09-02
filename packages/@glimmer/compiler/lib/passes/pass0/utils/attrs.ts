@@ -2,7 +2,7 @@ import { ExpressionContext } from '@glimmer/interfaces';
 import { AST, SyntaxError } from '@glimmer/syntax';
 import { assertPresent, assign } from '@glimmer/util';
 import * as pass1 from '../../pass1/ops';
-import { getAttrNamespace } from '../../utils';
+import { getAttrNamespace } from '../../../utils';
 import { buildArgs } from './builders';
 import { Context } from '../context';
 import { assertIsSimpleHelper, isHelperInvocation, isSimplePath, isTrustingNode } from './is-node';

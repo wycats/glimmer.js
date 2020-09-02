@@ -8,7 +8,7 @@ import { assertPresent } from '@glimmer/util';
 import * as pass1 from '../pass1/ops';
 import { SourceOffsets } from '../shared/location';
 import { Op as AbstractOp } from '../shared/op';
-import { deflateAttrName } from '../utils';
+import { deflateAttrName } from '../../utils';
 import { ComponentBlock, NamedBlock } from './blocks';
 
 /** ENCODABLE */
